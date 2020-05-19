@@ -8,6 +8,8 @@
 
 hpfeeds-broker is a simple python 3 asyncio implementation of a hpfeeds broker.
 
+WARNING: DO NOT USE THIS REPO. IT'S A WORK IN PROGRESS TO PULL THE BROKER OUT OF THE MAIN PYTHON PACKAGE AND **IS NOT** READY YET.
+
 ## Installation
 
 You can install it with with `pip`.
