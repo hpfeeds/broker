@@ -33,7 +33,6 @@ pub enum Frame {
         ident: String,
         channel: String,
     },
-    Bulk(Bytes),
     Array(Vec<Frame>),
 }
 
@@ -118,15 +117,6 @@ impl Frame {
                 Ok(Frame::Unsubscribe { ident, channel })
             }
             _ => Err("protocol error; invalid opcode".into()),
-        }
-    }
-}
-
-impl PartialEq<&str> for Frame {
-    fn eq(&self, other: &&str) -> bool {
-        match self {
-            Frame::Bulk(s) => s.eq(other),
-            _ => false,
         }
     }
 }
