@@ -1,8 +1,9 @@
 use tokio::sync::broadcast;
 
-use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+use crate::Frame;
 
 /// A wrapper around a `Db` instance. This exists to allow orderly cleanup
 /// of the `Db` by signalling the background purge task to shut down when
@@ -54,7 +55,7 @@ struct Shared {
 struct State {
     /// The pub/sub key-space. Redis uses a **separate** key space for key-value
     /// and pub/sub. `hpfeeds-broker` handles this by using a separate `HashMap`.
-    pub_sub: HashMap<String, broadcast::Sender<Bytes>>,
+    pub_sub: HashMap<String, broadcast::Sender<Frame>>,
 
     /// True when the Db instance is shutting down. This happens when all `Db`
     /// values drop. Setting this to `true` signals to the background task to
@@ -105,7 +106,7 @@ impl Db {
     ///
     /// The returned `Receiver` is used to receive values broadcast by `PUBLISH`
     /// commands.
-    pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Bytes> {
+    pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Frame> {
         use std::collections::hash_map::Entry;
 
         // Acquire the mutex
@@ -136,7 +137,7 @@ impl Db {
 
     /// Publish a message to the channel. Returns the number of subscribers
     /// listening on the channel.
-    pub(crate) fn publish(&self, key: &str, value: Bytes) -> usize {
+    pub(crate) fn publish(&self, key: &str, value: Frame) -> usize {
         let state = self.shared.state.lock().unwrap();
 
         state

@@ -353,11 +353,18 @@ impl Handler {
                     signature: _,
                 } => {}
                 Frame::Publish {
-                    ident: _,
+                    ident,
                     channel,
                     payload,
                 } => {
-                    self.db.publish(&channel, payload);
+                    self.db.publish(
+                        &channel,
+                        Frame::Publish {
+                            ident,
+                            channel: channel.clone(),
+                            payload,
+                        },
+                    );
                 }
                 Frame::Subscribe { ident: _, channel } => {
                     let mut rx = self.db.subscribe(channel.clone());
