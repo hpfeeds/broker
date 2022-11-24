@@ -99,13 +99,7 @@ impl Connection {
         // to hold the frame data unless we know the full frame has been
         // received.
         match Frame::check(&mut buf) {
-            Ok(_) => {
-                // The `check` function will have advanced the cursor until the
-                // end of the frame. Since the cursor had position set to zero
-                // before `Frame::check` was called, we obtain the length of the
-                // frame by checking the cursor position.
-                let len = buf.position() as usize;
-
+            Ok(len) => {
                 // Reset the position to zero before passing the cursor to
                 // `Frame::parse`.
                 buf.set_position(0);

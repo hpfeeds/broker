@@ -46,14 +46,14 @@ pub enum Error {
 
 impl Frame {
     /// Checks if an entire message can be decoded from `src`
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
+    pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
         let size = peek_u32(src)?;
 
         if src.remaining() < size as usize {
             return Err(Error::Incomplete);
         }
 
-        Ok(())
+        Ok(size as usize)
     }
 
     /// The message has already been validated with `check`.

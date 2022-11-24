@@ -21,6 +21,8 @@ async fn pub_sub() {
     .unwrap();
 
     let mut sub1 = Connection::new(TcpStream::connect(addr).await.unwrap());
+    sub1.read_frame().await.unwrap();
+
     sub1.write_frame(&Frame::Subscribe {
         ident: "sub1".into(),
         channel: "bar".into(),
@@ -46,6 +48,9 @@ async fn pub_sub() {
             assert_eq!(ident, "foo");
             assert_eq!(channel, "bar");
             assert_eq!(payload, Bytes::from_static(b"this is a byte strin2"));
+        }
+        Ok(Some(frame)) => {
+            panic!("Unexpected frame: {}", frame);
         }
         _ => {
             panic!("Unexpected")
