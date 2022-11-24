@@ -1,6 +1,3 @@
-mod get;
-pub use get::Get;
-
 mod publish;
 pub use publish::Publish;
 
@@ -20,7 +17,6 @@ use crate::{Connection, Db, Frame, Parse, ParseError, Shutdown};
 /// Methods called on `Command` are delegated to the command implementation.
 #[derive(Debug)]
 pub enum Command {
-    Get(Get),
     Publish(Publish),
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
@@ -53,7 +49,6 @@ impl Command {
         // Match the command name, delegating the rest of the parsing to the
         // specific command.
         let command = match &command_name[..] {
-            "get" => Command::Get(Get::parse_frames(&mut parse)?),
             "publish" => Command::Publish(Publish::parse_frames(&mut parse)?),
             "subscribe" => Command::Subscribe(Subscribe::parse_frames(&mut parse)?),
             "unsubscribe" => Command::Unsubscribe(Unsubscribe::parse_frames(&mut parse)?),
@@ -91,7 +86,6 @@ impl Command {
         use Command::*;
 
         match self {
-            Get(cmd) => cmd.apply(db, dst).await,
             Publish(cmd) => cmd.apply(db, dst).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Ping(cmd) => cmd.apply(dst).await,
@@ -105,7 +99,6 @@ impl Command {
     /// Returns the command name
     pub(crate) fn get_name(&self) -> &str {
         match self {
-            Command::Get(_) => "get",
             Command::Publish(_) => "pub",
             Command::Subscribe(_) => "subscribe",
             Command::Unsubscribe(_) => "unsubscribe",

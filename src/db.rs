@@ -87,10 +87,7 @@ struct State {
 
 /// Entry in the key-value store
 #[derive(Debug)]
-struct Entry {
-    /// Stored data
-    data: Bytes,
-}
+struct Entry {}
 
 impl DbDropGuard {
     /// Create a new `DbHolder`, wrapping a `Db` instance. When this is dropped
@@ -131,20 +128,6 @@ impl Db {
         tokio::spawn(purge_expired_tasks(shared.clone()));
 
         Db { shared }
-    }
-
-    /// Get the value associated with a key.
-    ///
-    /// Returns `None` if there is no value associated with the key. This may be
-    /// due to never having assigned a value to the key or a previously assigned
-    /// value expired.
-    pub(crate) fn get(&self, key: &str) -> Option<Bytes> {
-        // Acquire the lock, get the entry and clone the value.
-        //
-        // Because data is stored using `Bytes`, a clone here is a shallow
-        // clone. Data is not copied.
-        let state = self.shared.state.lock().unwrap();
-        state.entries.get(key).map(|entry| entry.data.clone())
     }
 
     /// Returns a `Receiver` for the requested channel.
