@@ -34,7 +34,6 @@ pub enum Frame {
         channel: String,
     },
     Bulk(Bytes),
-    Null,
     Array(Vec<Frame>),
 }
 
