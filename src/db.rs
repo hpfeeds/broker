@@ -1,5 +1,5 @@
 use tokio::sync::{broadcast, Notify};
-use tokio::time::{self, Duration, Instant};
+use tokio::time::{self, Instant};
 
 use bytes::Bytes;
 use std::collections::{BTreeMap, HashMap};
@@ -79,10 +79,6 @@ struct State {
     /// to break these ties.
     expirations: BTreeMap<(Instant, u64), String>,
 
-    /// Identifier to use for the next expiration. Each expiration is associated
-    /// with a unique identifier. See above for why.
-    next_id: u64,
-
     /// True when the Db instance is shutting down. This happens when all `Db`
     /// values drop. Setting this to `true` signals to the background task to
     /// exit.
@@ -92,15 +88,8 @@ struct State {
 /// Entry in the key-value store
 #[derive(Debug)]
 struct Entry {
-    /// Uniquely identifies this entry.
-    id: u64,
-
     /// Stored data
     data: Bytes,
-
-    /// Instant at which the entry expires and should be removed from the
-    /// database.
-    expires_at: Option<Instant>,
 }
 
 impl DbDropGuard {
@@ -133,7 +122,6 @@ impl Db {
                 entries: HashMap::new(),
                 pub_sub: HashMap::new(),
                 expirations: BTreeMap::new(),
-                next_id: 0,
                 shutdown: false,
             }),
             background_task: Notify::new(),
@@ -157,74 +145,6 @@ impl Db {
         // clone. Data is not copied.
         let state = self.shared.state.lock().unwrap();
         state.entries.get(key).map(|entry| entry.data.clone())
-    }
-
-    /// Set the value associated with a key along with an optional expiration
-    /// Duration.
-    ///
-    /// If a value is already associated with the key, it is removed.
-    pub(crate) fn set(&self, key: String, value: Bytes, expire: Option<Duration>) {
-        let mut state = self.shared.state.lock().unwrap();
-
-        // Get and increment the next insertion ID. Guarded by the lock, this
-        // ensures a unique identifier is associated with each `set` operation.
-        let id = state.next_id;
-        state.next_id += 1;
-
-        // If this `set` becomes the key that expires **next**, the background
-        // task needs to be notified so it can update its state.
-        //
-        // Whether or not the task needs to be notified is computed during the
-        // `set` routine.
-        let mut notify = false;
-
-        let expires_at = expire.map(|duration| {
-            // `Instant` at which the key expires.
-            let when = Instant::now() + duration;
-
-            // Only notify the worker task if the newly inserted expiration is the
-            // **next** key to evict. In this case, the worker needs to be woken up
-            // to update its state.
-            notify = state
-                .next_expiration()
-                .map(|expiration| expiration > when)
-                .unwrap_or(true);
-
-            // Track the expiration.
-            state.expirations.insert((when, id), key.clone());
-            when
-        });
-
-        // Insert the entry into the `HashMap`.
-        let prev = state.entries.insert(
-            key,
-            Entry {
-                id,
-                data: value,
-                expires_at,
-            },
-        );
-
-        // If there was a value previously associated with the key **and** it
-        // had an expiration time. The associated entry in the `expirations` map
-        // must also be removed. This avoids leaking data.
-        if let Some(prev) = prev {
-            if let Some(when) = prev.expires_at {
-                // clear expiration
-                state.expirations.remove(&(when, prev.id));
-            }
-        }
-
-        // Release the mutex before notifying the background task. This helps
-        // reduce contention by avoiding the background task waking up only to
-        // be unable to acquire the mutex due to this function still holding it.
-        drop(state);
-
-        if notify {
-            // Finally, only notify the background task if it needs to update
-            // its state to reflect a new expiration.
-            self.shared.background_task.notify_one();
-        }
     }
 
     /// Returns a `Receiver` for the requested channel.
@@ -336,15 +256,6 @@ impl Shared {
     /// that the shared state can no longer be accessed.
     fn is_shutdown(&self) -> bool {
         self.state.lock().unwrap().shutdown
-    }
-}
-
-impl State {
-    fn next_expiration(&self) -> Option<Instant> {
-        self.expirations
-            .keys()
-            .next()
-            .map(|expiration| expiration.0)
     }
 }
 

@@ -8,7 +8,6 @@ use tokio::sync::oneshot;
 #[derive(Debug)]
 enum Command {
     Get(String),
-    Set(String, Bytes),
 }
 
 // Message type sent over the channel to the connection task.
@@ -43,27 +42,6 @@ impl Buffer {
         // Await the response
         match rx.await {
             Ok(res) => res,
-            Err(err) => Err(err.into()),
-        }
-    }
-
-    /// Set `key` to hold the given `value`.
-    ///
-    /// Same as `Client::set` but requests are **buffered** until the associated
-    /// connection has the ability to send the request
-    pub async fn set(&mut self, key: &str, value: Bytes) -> Result<()> {
-        // Initialize a new `Set` command to send via the channel.
-        let set = Command::Set(key.into(), value);
-
-        // Initialize a new oneshot to be used to receive the response back from the connection.
-        let (tx, rx) = oneshot::channel();
-
-        // Send the request
-        self.tx.send((set, tx)).await?;
-
-        // Await the response
-        match rx.await {
-            Ok(res) => res.map(|_| ()),
             Err(err) => Err(err.into()),
         }
     }
