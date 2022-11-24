@@ -211,7 +211,6 @@ impl Connection {
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(channel.as_bytes()).await?;
             }
-            _ => {}
         }
 
         // Ensure the encoded frame is written to the socket. The calls above

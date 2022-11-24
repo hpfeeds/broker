@@ -33,7 +33,6 @@ pub enum Frame {
         ident: String,
         channel: String,
     },
-    Array(Vec<Frame>),
 }
 
 #[derive(Debug)]
