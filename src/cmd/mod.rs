@@ -81,7 +81,7 @@ impl Command {
         use Command::*;
 
         match self {
-            Publish(cmd) => cmd.apply(db, dst).await,
+            Publish(cmd) => cmd.apply(db).await,
             Subscribe(cmd) => cmd.apply(db, dst, shutdown).await,
             Unknown(cmd) => cmd.apply(dst).await,
             // `Unsubscribe` cannot be applied. It may only be received from the

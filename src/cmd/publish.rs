@@ -1,4 +1,4 @@
-use crate::{Connection, Db, Frame, Parse};
+use crate::{Db, Parse};
 
 use bytes::Bytes;
 
@@ -56,7 +56,7 @@ impl Publish {
     ///
     /// The response is written to `dst`. This is called by the server in order
     /// to execute a received command.
-    pub(crate) async fn apply(self, db: &Db, dst: &mut Connection) -> crate::Result<()> {
+    pub(crate) async fn apply(self, db: &Db) -> crate::Result<()> {
         // The shared state contains the `tokio::sync::broadcast::Sender` for
         // all active channels. Calling `db.publish` dispatches the message into
         // the appropriate channel.
@@ -66,14 +66,7 @@ impl Publish {
         // receive the message. Subscribers may drop before receiving the
         // message. Given this, `num_subscribers` should only be used as a
         // "hint".
-        let num_subscribers = db.publish(&self.channel, self.message);
-
-        // The number of subscribers is returned as the response to the publish
-        // request.
-        let response = Frame::Integer(num_subscribers as u64);
-
-        // Write the frame to the client.
-        dst.write_frame(&response).await?;
+        db.publish(&self.channel, self.message);
 
         Ok(())
     }

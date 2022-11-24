@@ -173,7 +173,7 @@ async fn subscribe_to_channel(
     subscriptions.insert(channel_name.clone(), rx);
 
     // Respond with the successful subscription
-    let response = make_subscribe_frame(channel_name, subscriptions.len());
+    let response = make_subscribe_frame(channel_name);
     dst.write_frame(&response).await?;
 
     Ok(())
@@ -215,7 +215,7 @@ async fn handle_command(
             for channel_name in unsubscribe.channels {
                 subscriptions.remove(&channel_name);
 
-                let response = make_unsubscribe_frame(channel_name, subscriptions.len());
+                let response = make_unsubscribe_frame(channel_name);
                 dst.write_frame(&response).await?;
             }
         }
@@ -233,20 +233,18 @@ async fn handle_command(
 /// a `&str` since `Bytes::from` can reuse the allocation in the `String`, and
 /// taking a `&str` would require copying the data. This allows the caller to
 /// decide whether to clone the channel name or not.
-fn make_subscribe_frame(channel_name: String, num_subs: usize) -> Frame {
+fn make_subscribe_frame(channel_name: String) -> Frame {
     let mut response = Frame::array();
     response.push_bulk(Bytes::from_static(b"subscribe"));
     response.push_bulk(Bytes::from(channel_name));
-    response.push_int(num_subs as u64);
     response
 }
 
 /// Creates the response to an unsubcribe request.
-fn make_unsubscribe_frame(channel_name: String, num_subs: usize) -> Frame {
+fn make_unsubscribe_frame(channel_name: String) -> Frame {
     let mut response = Frame::array();
     response.push_bulk(Bytes::from_static(b"unsubscribe"));
     response.push_bulk(Bytes::from(channel_name));
-    response.push_int(num_subs as u64);
     response
 }
 

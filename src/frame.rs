@@ -33,7 +33,6 @@ pub enum Frame {
         ident: String,
         channel: String,
     },
-    Integer(u64),
     Bulk(Bytes),
     Null,
     Array(Vec<Frame>),
@@ -63,20 +62,6 @@ impl Frame {
         match self {
             Frame::Array(vec) => {
                 vec.push(Frame::Bulk(bytes));
-            }
-            _ => panic!("not an array frame"),
-        }
-    }
-
-    /// Push an "integer" frame into the array. `self` must be an Array frame.
-    ///
-    /// # Panics
-    ///
-    /// panics if `self` is not an array
-    pub(crate) fn push_int(&mut self, value: u64) {
-        match self {
-            Frame::Array(vec) => {
-                vec.push(Frame::Integer(value));
             }
             _ => panic!("not an array frame"),
         }
