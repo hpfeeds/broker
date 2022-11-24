@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
+use tokio_stream::StreamExt;
 use tokio_stream::StreamMap;
 use tracing::{debug, error, info, instrument};
 
@@ -330,6 +331,10 @@ impl Handler {
             // signal.
             let maybe_frame = tokio::select! {
                 res = self.connection.read_frame() => res?,
+                Some((_, frame)) = subscriptions.next() => {
+                    self.connection.write_frame(&frame).await?;
+                    continue;
+                },
                 _ = self.shutdown.recv() => {
                     // If a shutdown signal is received, return from `run`.
                     // This will result in the task terminating.
