@@ -5,6 +5,7 @@
 
 use crate::{Connection, Db, DbDropGuard, Frame, Shutdown};
 
+use rand::RngCore;
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
@@ -317,6 +318,16 @@ impl Handler {
     /// it reaches a safe state, at which point it is terminated.
     #[instrument(skip(self))]
     async fn run(&mut self) -> crate::Result<()> {
+        let mut data = [0u8; 4];
+        rand::thread_rng().fill_bytes(&mut data);
+
+        self.connection
+            .write_frame(&Frame::Info {
+                broker_name: "hpfeeds-broker".into(),
+                nonce: data.to_vec().into(),
+            })
+            .await?;
+
         // An individual client may subscribe to multiple channels and may
         // dynamically add and remove channels from its subscription set. To
         // handle this, a `StreamMap` is used to track active subscriptions. The
