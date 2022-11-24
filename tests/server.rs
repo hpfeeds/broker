@@ -1,22 +1,64 @@
-use hpfeeds_broker::server;
+use bytes::Bytes;
+use hpfeeds_broker::{server, Connection, Frame};
 
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::{self, Duration};
+// use tokio::time::{self, Duration};
 
 #[tokio::test]
 async fn pub_sub() {
     let addr = start_server().await;
 
-    let mut publisher = TcpStream::connect(addr).await.unwrap();
+    let mut conn = Connection::new(TcpStream::connect(addr).await.unwrap());
+    let payload: &[u8; 21] = b"this is a byte string";
+    conn.write_frame(&Frame::Publish {
+        ident: "foo".into(),
+        channel: "bar".into(),
+        payload: payload.to_vec().into(),
+    })
+    .await
+    .unwrap();
 
+    let mut sub1 = Connection::new(TcpStream::connect(addr).await.unwrap());
+    sub1.write_frame(&Frame::Subscribe {
+        ident: "sub1".into(),
+        channel: "bar".into(),
+    })
+    .await
+    .unwrap();
+
+    let payload: &[u8; 21] = b"this is a byte strin2";
+    conn.write_frame(&Frame::Publish {
+        ident: "foo".into(),
+        channel: "bar".into(),
+        payload: payload.to_vec().into(),
+    })
+    .await
+    .unwrap();
+
+    match sub1.read_frame().await {
+        Ok(Some(Frame::Publish {
+            ident,
+            channel,
+            payload,
+        })) => {
+            assert_eq!(ident, "foo");
+            assert_eq!(channel, "bar");
+            assert_eq!(payload, Bytes::from_static(b"this is a byte strin2"));
+        }
+        _ => {
+            panic!("Unexpected")
+        }
+    }
+
+    /*
     // Publish a message, there are no subscribers yet so the server will
     // return `0`.
     publisher
-        .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
-        .await
-        .unwrap();
+    .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
+    .await
+    .unwrap();
 
     let mut response = [0; 4];
     publisher.read_exact(&mut response).await.unwrap();
@@ -26,8 +68,8 @@ async fn pub_sub() {
     // channel.
     let mut sub1 = TcpStream::connect(addr).await.unwrap();
     sub1.write_all(b"*2\r\n$9\r\nSUBSCRIBE\r\n$5\r\nhello\r\n")
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     // Read the subscribe response
     let mut response = [0; 34];
@@ -39,9 +81,9 @@ async fn pub_sub() {
 
     // Publish a message, there now is a subscriber
     publisher
-        .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
-        .await
-        .unwrap();
+    .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
+    .await
+    .unwrap();
 
     let mut response = [0; 4];
     publisher.read_exact(&mut response).await.unwrap();
@@ -60,8 +102,8 @@ async fn pub_sub() {
     // This subscriber will be subscribed to both `hello` and `foo`
     let mut sub2 = TcpStream::connect(addr).await.unwrap();
     sub2.write_all(b"*3\r\n$9\r\nSUBSCRIBE\r\n$5\r\nhello\r\n$3\r\nfoo\r\n")
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     // Read the subscribe response
     let mut response = [0; 34];
@@ -79,9 +121,9 @@ async fn pub_sub() {
 
     // Publish another message on `hello`, there are two subscribers
     publisher
-        .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\njazzy\r\n")
-        .await
-        .unwrap();
+    .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$5\r\nhello\r\n$5\r\njazzy\r\n")
+    .await
+    .unwrap();
 
     let mut response = [0; 4];
     publisher.read_exact(&mut response).await.unwrap();
@@ -89,9 +131,9 @@ async fn pub_sub() {
 
     // Publish a message on `foo`, there is only one subscriber
     publisher
-        .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
-        .await
-        .unwrap();
+    .write_all(b"*3\r\n$7\r\nPUBLISH\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+    .await
+    .unwrap();
 
     let mut response = [0; 4];
     publisher.read_exact(&mut response).await.unwrap();
@@ -116,8 +158,8 @@ async fn pub_sub() {
     // The first subscriber **did not** receive the second message
     let mut response = [0; 1];
     time::timeout(Duration::from_millis(100), sub1.read(&mut response))
-        .await
-        .unwrap_err();
+    .await
+    .unwrap_err();
 
     // The second subscriber **did** receive the message
     let mut response = [0; 35];
@@ -126,7 +168,10 @@ async fn pub_sub() {
         &b"*3\r\n$7\r\nmessage\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"[..],
         &response[..]
     );
+    */
 }
+
+/*
 
 #[tokio::test]
 async fn manage_subscription() {
@@ -282,6 +327,7 @@ async fn send_error_get_set_after_subscribe() {
     stream.read_exact(&mut response).await.unwrap();
     assert_eq!(b"-ERR unknown command \'get\'\r\n", &response);
 }
+*/
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
