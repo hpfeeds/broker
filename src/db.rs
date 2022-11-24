@@ -1,4 +1,4 @@
-use tokio::sync::{broadcast, Notify};
+use tokio::sync::broadcast;
 
 use bytes::Bytes;
 use std::collections::HashMap;
@@ -48,11 +48,6 @@ struct Shared {
     /// is considered a "blocking" operation and `tokio::task::spawn_blocking`
     /// should be used.
     state: Mutex<State>,
-
-    /// Notifies the background task handling entry expiration. The background
-    /// task waits on this to be notified, then checks for expired values or the
-    /// shutdown signal.
-    background_task: Notify,
 }
 
 #[derive(Debug)]
@@ -101,7 +96,6 @@ impl Db {
                 pub_sub: HashMap::new(),
                 shutdown: false,
             }),
-            background_task: Notify::new(),
         });
 
         Db { shared }
@@ -164,11 +158,6 @@ impl Db {
         // setting `State::shutdown` to `true` and signalling the task.
         let mut state = self.shared.state.lock().unwrap();
         state.shutdown = true;
-
-        // Drop the lock before signalling the background task. This helps
-        // reduce lock contention by ensuring the background task doesn't
-        // wake up only to be unable to acquire the mutex.
         drop(state);
-        self.shared.background_task.notify_one();
     }
 }
