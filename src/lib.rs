@@ -18,9 +18,6 @@
 //!   intermediate representation between a "command" and the byte
 //!   representation.
 
-pub mod cmd;
-pub use cmd::Command;
-
 mod connection;
 pub use connection::Connection;
 
@@ -30,9 +27,6 @@ pub use frame::Frame;
 mod db;
 use db::Db;
 use db::DbDropGuard;
-
-mod parse;
-use parse::{Parse, ParseError};
 
 pub mod server;
 

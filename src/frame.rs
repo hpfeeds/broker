@@ -47,25 +47,6 @@ pub enum Error {
 }
 
 impl Frame {
-    /// Returns an empty array
-    pub(crate) fn array() -> Frame {
-        Frame::Array(vec![])
-    }
-
-    /// Push a "bulk" frame into the array. `self` must be an Array frame.
-    ///
-    /// # Panics
-    ///
-    /// panics if `self` is not an array
-    pub(crate) fn push_bulk(&mut self, bytes: Bytes) {
-        match self {
-            Frame::Array(vec) => {
-                vec.push(Frame::Bulk(bytes));
-            }
-            _ => panic!("not an array frame"),
-        }
-    }
-
     /// Checks if an entire message can be decoded from `src`
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
         let size = peek_u32(src)?;

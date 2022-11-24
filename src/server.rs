@@ -3,13 +3,14 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{Command, Connection, Db, DbDropGuard, Shutdown};
+use crate::{Connection, Db, DbDropGuard, Frame, Shutdown};
 
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
+use tokio_stream::StreamMap;
 use tracing::{debug, error, info, instrument};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
@@ -315,6 +316,13 @@ impl Handler {
     /// it reaches a safe state, at which point it is terminated.
     #[instrument(skip(self))]
     async fn run(&mut self) -> crate::Result<()> {
+        // An individual client may subscribe to multiple channels and may
+        // dynamically add and remove channels from its subscription set. To
+        // handle this, a `StreamMap` is used to track active subscriptions. The
+        // `StreamMap` merges messages from individual broadcast channels as
+        // they are received.
+        let mut subscriptions = StreamMap::new();
+
         // As long as the shutdown signal has not been received, try to read a
         // new request frame.
         while !self.shutdown.is_shutdown() {
@@ -337,31 +345,45 @@ impl Handler {
                 None => return Ok(()),
             };
 
-            // Convert the redis frame into a command struct. This returns an
-            // error if the frame is not a valid redis command or it is an
-            // unsupported command.
-            let cmd = Command::from_frame(frame)?;
+            debug!(?frame);
 
-            // Logs the `cmd` object. The syntax here is a shorthand provided by
-            // the `tracing` crate. It can be thought of as similar to:
-            //
-            // ```
-            // debug!(cmd = format!("{:?}", cmd));
-            // ```
-            //
-            // `tracing` provides structured logging, so information is "logged"
-            // as key-value pairs.
-            debug!(?cmd);
+            match frame {
+                Frame::Auth {
+                    ident: _,
+                    signature: _,
+                } => {}
+                Frame::Publish {
+                    ident: _,
+                    channel,
+                    payload,
+                } => {
+                    self.db.publish(&channel, payload);
+                }
+                Frame::Subscribe { ident: _, channel } => {
+                    let mut rx = self.db.subscribe(channel.clone());
 
-            // Perform the work needed to apply the command. This may mutate the
-            // database state as a result.
-            //
-            // The connection is passed into the apply function which allows the
-            // command to write response frames directly to the connection. In
-            // the case of pub/sub, multiple frames may be send back to the
-            // peer.
-            cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
-                .await?;
+                    // Subscribe to the channel.
+                    let rx = Box::pin(async_stream::stream! {
+                        loop {
+                            match rx.recv().await {
+                                Ok(msg) => yield msg,
+                                // If we lagged in consuming messages, just resume.
+                                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                                Err(_) => break,
+                            }
+                        }
+                    });
+
+                    // Track subscription in this client's subscription set.
+                    subscriptions.insert(channel.clone(), rx);
+                }
+                Frame::Unsubscribe { ident: _, channel } => {
+                    subscriptions.remove(&channel);
+                }
+                _ => {
+                    return Err("protocol err; unexpected action".into());
+                }
+            };
         }
 
         Ok(())
