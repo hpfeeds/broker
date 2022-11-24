@@ -33,7 +33,6 @@ pub enum Frame {
         ident: String,
         channel: String,
     },
-    Simple(String),
     Integer(u64),
     Bulk(Bytes),
     Null,
@@ -161,7 +160,6 @@ impl Frame {
 impl PartialEq<&str> for Frame {
     fn eq(&self, other: &&str) -> bool {
         match self {
-            Frame::Simple(s) => s.eq(other),
             Frame::Bulk(s) => s.eq(other),
             _ => false,
         }
