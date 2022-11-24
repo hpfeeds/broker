@@ -11,8 +11,29 @@ use std::string::FromUtf8Error;
 /// A frame in the Redis protocol.
 #[derive(Clone, Debug)]
 pub enum Frame {
-    Simple(String),
     Error(String),
+    Info {
+        broker_name: String,
+        nonce: Bytes,
+    },
+    Auth {
+        ident: String,
+        signature: Bytes,
+    },
+    Publish {
+        ident: String,
+        channel: String,
+        payload: Bytes,
+    },
+    Subscribe {
+        ident: String,
+        channel: String,
+    },
+    Unsubscribe {
+        ident: String,
+        channel: String,
+    },
+    Simple(String),
     Integer(u64),
     Bulk(Bytes),
     Null,
@@ -64,106 +85,75 @@ impl Frame {
 
     /// Checks if an entire message can be decoded from `src`
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
-        match get_u8(src)? {
-            b'+' => {
-                get_line(src)?;
-                Ok(())
-            }
-            b'-' => {
-                get_line(src)?;
-                Ok(())
-            }
-            b':' => {
-                let _ = get_decimal(src)?;
-                Ok(())
-            }
-            b'$' => {
-                if b'-' == peek_u8(src)? {
-                    // Skip '-1\r\n'
-                    skip(src, 4)
-                } else {
-                    // Read the bulk string
-                    let len: usize = get_decimal(src)?.try_into()?;
+        let size = peek_u32(src)?;
 
-                    // skip that number of bytes + 2 (\r\n).
-                    skip(src, len + 2)
-                }
-            }
-            b'*' => {
-                let len = get_decimal(src)?;
-
-                for _ in 0..len {
-                    Frame::check(src)?;
-                }
-
-                Ok(())
-            }
-            actual => Err(format!("protocol error; invalid frame type byte `{}`", actual).into()),
+        if src.remaining() < size as usize {
+            return Err(Error::Incomplete);
         }
+
+        Ok(())
     }
 
     /// The message has already been validated with `check`.
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
-        match get_u8(src)? {
-            b'+' => {
-                // Read the line and convert it to `Vec<u8>`
-                let line = get_line(src)?.to_vec();
+        let pos = src.position();
+        let size = src.get_u32();
 
-                // Convert the line to a String
-                let string = String::from_utf8(line)?;
+        match src.get_u8() {
+            // OP_ERROR
+            0 => {
+                // Rest of this message is a utf-8 string
+                let error = String::from_utf8(get_remaining(src, pos, size)?.to_vec())?;
 
-                Ok(Frame::Simple(string))
+                Ok(Frame::Error(error))
             }
-            b'-' => {
-                // Read the line and convert it to `Vec<u8>`
-                let line = get_line(src)?.to_vec();
+            // OP_INFO
+            1 => {
+                let broker_name = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let nonce = get_remaining(src, pos, size)?.to_vec();
 
-                // Convert the line to a String
-                let string = String::from_utf8(line)?;
-
-                Ok(Frame::Error(string))
+                Ok(Frame::Info {
+                    broker_name,
+                    nonce: nonce.into(),
+                })
             }
-            b':' => {
-                let len = get_decimal(src)?;
-                Ok(Frame::Integer(len))
+            // OP_AUTH
+            2 => {
+                let ident = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let signature = get_remaining(src, pos, size)?.to_vec();
+
+                Ok(Frame::Auth {
+                    ident,
+                    signature: signature.into(),
+                })
             }
-            b'$' => {
-                if b'-' == peek_u8(src)? {
-                    let line = get_line(src)?;
+            // OP_PUBLISH
+            3 => {
+                let ident = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let channel = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let payload = get_remaining(src, pos, size)?.to_vec();
 
-                    if line != b"-1" {
-                        return Err("protocol error; invalid frame format".into());
-                    }
-
-                    Ok(Frame::Null)
-                } else {
-                    // Read the bulk string
-                    let len = get_decimal(src)?.try_into()?;
-                    let n = len + 2;
-
-                    if src.remaining() < n {
-                        return Err(Error::Incomplete);
-                    }
-
-                    let data = Bytes::copy_from_slice(&src.chunk()[..len]);
-
-                    // skip that number of bytes + 2 (\r\n).
-                    skip(src, n)?;
-
-                    Ok(Frame::Bulk(data))
-                }
+                Ok(Frame::Publish {
+                    ident,
+                    channel,
+                    payload: payload.into(),
+                })
             }
-            b'*' => {
-                let len = get_decimal(src)?.try_into()?;
-                let mut out = Vec::with_capacity(len);
+            // OP_SUBSCRIBE
+            4 => {
+                let ident = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let channel = String::from_utf8(get_remaining(src, pos, size)?.to_vec())?;
 
-                for _ in 0..len {
-                    out.push(Frame::parse(src)?);
-                }
-
-                Ok(Frame::Array(out))
+                Ok(Frame::Subscribe { ident, channel })
             }
-            _ => unimplemented!(),
+            // OP_UNSUBSCRIBE
+            5 => {
+                let ident = String::from_utf8(get_sized_string(src)?.to_vec())?;
+                let channel = String::from_utf8(get_remaining(src, pos, size)?.to_vec())?;
+
+                Ok(Frame::Unsubscribe { ident, channel })
+            }
+            _ => Err("protocol error; invalid opcode".into()),
         }
     }
 }
@@ -180,83 +170,41 @@ impl PartialEq<&str> for Frame {
 
 impl fmt::Display for Frame {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        use std::str;
-
-        match self {
-            Frame::Simple(response) => response.fmt(fmt),
-            Frame::Error(msg) => write!(fmt, "error: {}", msg),
-            Frame::Integer(num) => num.fmt(fmt),
-            Frame::Bulk(msg) => match str::from_utf8(msg) {
-                Ok(string) => string.fmt(fmt),
-                Err(_) => write!(fmt, "{:?}", msg),
-            },
-            Frame::Null => "(nil)".fmt(fmt),
-            Frame::Array(parts) => {
-                for (i, part) in parts.iter().enumerate() {
-                    if i > 0 {
-                        write!(fmt, " ")?;
-                        part.fmt(fmt)?;
-                    }
-                }
-
-                Ok(())
-            }
-        }
+        write!(fmt, "{:?}", self)?;
+        Ok(())
     }
 }
 
-fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
+fn peek_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     if !src.has_remaining() {
         return Err(Error::Incomplete);
     }
 
-    Ok(src.chunk()[0])
-}
-
-fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
-    if !src.has_remaining() {
+    if src.remaining() < 4 {
         return Err(Error::Incomplete);
-    }
+    };
 
-    Ok(src.get_u8())
+    Ok(u32::from_be_bytes(src.chunk()[..4].try_into().unwrap()))
 }
 
-fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
-    if src.remaining() < n {
-        return Err(Error::Incomplete);
-    }
-
-    src.advance(n);
-    Ok(())
-}
-
-/// Read a new-line terminated decimal
-fn get_decimal(src: &mut Cursor<&[u8]>) -> Result<u64, Error> {
-    use atoi::atoi;
-
-    let line = get_line(src)?;
-
-    atoi::<u64>(line).ok_or_else(|| "protocol error; invalid frame format".into())
-}
-
-/// Find a line
-fn get_line<'a>(src: &mut Cursor<&'a [u8]>) -> Result<&'a [u8], Error> {
-    // Scan the bytes directly
+fn get_sized_string<'a>(src: &mut Cursor<&'a [u8]>) -> Result<&'a [u8], Error> {
+    let size = src.get_u8() as usize;
     let start = src.position() as usize;
-    // Scan to the second to last byte
-    let end = src.get_ref().len() - 1;
+    let end = start + size;
 
-    for i in start..end {
-        if src.get_ref()[i] == b'\r' && src.get_ref()[i + 1] == b'\n' {
-            // We found a line, update the position to be *after* the \n
-            src.set_position((i + 2) as u64);
+    src.advance(size);
 
-            // Return the line
-            return Ok(&src.get_ref()[start..i]);
-        }
-    }
+    Ok(&src.get_ref()[start..end])
+}
 
-    Err(Error::Incomplete)
+fn get_remaining<'a>(src: &mut Cursor<&'a [u8]>, pos: u64, size: u32) -> Result<&'a [u8], Error> {
+    let cur_pos = src.position() as usize;
+    let consumed = (src.position() - pos) as usize;
+    let left = (size as usize) - consumed;
+
+    src.advance(left);
+
+    Ok(&src.get_ref()[cur_pos..cur_pos + left])
 }
 
 impl From<String> for Error {

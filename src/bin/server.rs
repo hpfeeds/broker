@@ -44,7 +44,12 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(name = "hpfeeds-broker", version, author, about = "A HPFeeds event broker")]
+#[clap(
+    name = "hpfeeds-broker",
+    version,
+    author,
+    about = "A HPFeeds event broker"
+)]
 struct Cli {
     #[clap(long)]
     port: Option<u16>,

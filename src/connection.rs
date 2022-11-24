@@ -158,79 +158,65 @@ impl Connection {
         // considered literals. For now, hpfeeds-broker is not able to encode
         // recursive frame structures. See below for more details.
         match frame {
-            Frame::Array(val) => {
-                // Encode the frame type prefix. For an array, it is `*`.
-                self.stream.write_u8(b'*').await?;
-
-                // Encode the length of the array.
-                self.write_decimal(val.len() as u64).await?;
-
-                // Iterate and encode each entry in the array.
-                for entry in &**val {
-                    self.write_value(entry).await?;
-                }
+            Frame::Error(error) => {
+                let size = 5 + error.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(0).await?;
+                self.stream.write_u8(error.len() as u8).await?;
+                self.stream.write_all(error.as_bytes()).await?;
             }
-            // The frame type is a literal. Encode the value directly.
-            _ => self.write_value(frame).await?,
+            Frame::Info { broker_name, nonce } => {
+                let size = 6 + broker_name.len() + nonce.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(1).await?;
+                self.stream.write_u8(broker_name.len() as u8).await?;
+                self.stream.write_all(broker_name.as_bytes()).await?;
+                self.stream.write_all(nonce).await?;
+            }
+            Frame::Auth { ident, signature } => {
+                let size = 6 + ident.len() + signature.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(2).await?;
+                self.stream.write_u8(ident.len() as u8).await?;
+                self.stream.write_all(ident.as_bytes()).await?;
+                self.stream.write_all(signature).await?;
+            }
+            Frame::Publish {
+                ident,
+                channel,
+                payload,
+            } => {
+                let size = 7 + ident.len() + channel.len() + payload.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(3).await?;
+                self.stream.write_u8(ident.len() as u8).await?;
+                self.stream.write_all(ident.as_bytes()).await?;
+                self.stream.write_u8(channel.len() as u8).await?;
+                self.stream.write_all(channel.as_bytes()).await?;
+                self.stream.write_all(payload).await?;
+            }
+            Frame::Subscribe { ident, channel } => {
+                let size = 6 + ident.len() + channel.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(4).await?;
+                self.stream.write_u8(ident.len() as u8).await?;
+                self.stream.write_all(ident.as_bytes()).await?;
+                self.stream.write_all(channel.as_bytes()).await?;
+            }
+            Frame::Unsubscribe { ident, channel } => {
+                let size = 6 + ident.len() + channel.len();
+                self.stream.write_u32(size as u32).await?;
+                self.stream.write_u8(5).await?;
+                self.stream.write_u8(ident.len() as u8).await?;
+                self.stream.write_all(ident.as_bytes()).await?;
+                self.stream.write_all(channel.as_bytes()).await?;
+            }
+            _ => {}
         }
 
         // Ensure the encoded frame is written to the socket. The calls above
         // are to the buffered stream and writes. Calling `flush` writes the
         // remaining contents of the buffer to the socket.
         self.stream.flush().await
-    }
-
-    /// Write a frame literal to the stream
-    async fn write_value(&mut self, frame: &Frame) -> io::Result<()> {
-        match frame {
-            Frame::Simple(val) => {
-                self.stream.write_u8(b'+').await?;
-                self.stream.write_all(val.as_bytes()).await?;
-                self.stream.write_all(b"\r\n").await?;
-            }
-            Frame::Error(val) => {
-                self.stream.write_u8(b'-').await?;
-                self.stream.write_all(val.as_bytes()).await?;
-                self.stream.write_all(b"\r\n").await?;
-            }
-            Frame::Integer(val) => {
-                self.stream.write_u8(b':').await?;
-                self.write_decimal(*val).await?;
-            }
-            Frame::Null => {
-                self.stream.write_all(b"$-1\r\n").await?;
-            }
-            Frame::Bulk(val) => {
-                let len = val.len();
-
-                self.stream.write_u8(b'$').await?;
-                self.write_decimal(len as u64).await?;
-                self.stream.write_all(val).await?;
-                self.stream.write_all(b"\r\n").await?;
-            }
-            // Encoding an `Array` from within a value cannot be done using a
-            // recursive strategy. In general, async fns do not support
-            // recursion. hpfeeds-broker has not needed to encode nested arrays yet,
-            // so for now it is skipped.
-            Frame::Array(_val) => unreachable!(),
-        }
-
-        Ok(())
-    }
-
-    /// Write a decimal frame to the stream
-    async fn write_decimal(&mut self, val: u64) -> io::Result<()> {
-        use std::io::Write;
-
-        // Convert the value to a string
-        let mut buf = [0u8; 20];
-        let mut buf = Cursor::new(&mut buf[..]);
-        write!(&mut buf, "{}", val)?;
-
-        let pos = buf.position() as usize;
-        self.stream.write_all(&buf.get_ref()[..pos]).await?;
-        self.stream.write_all(b"\r\n").await?;
-
-        Ok(())
     }
 }
