@@ -1,4 +1,4 @@
-//! Minimal Redis server implementation
+//! HPFeeds broker server implementation
 //!
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
@@ -106,13 +106,9 @@ struct Handler {
 /// A real application will want to make this value configurable, but for this
 /// example, it is hard coded.
 ///
-/// This is also set to a pretty low value to discourage using this in
-/// production (you'd think that all the disclaimers would make it obvious that
-/// this is not a serious project... but I thought that about mini-http as
-/// well).
-const MAX_CONNECTIONS: usize = 250;
+const MAX_CONNECTIONS: usize = 2500;
 
-/// Run the mini-redis server.
+/// Run the broker.
 ///
 /// Accepts connections from the supplied listener. For each inbound connection,
 /// a task is spawned to handle that connection. The server runs until the

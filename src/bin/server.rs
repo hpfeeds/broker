@@ -1,12 +1,12 @@
-//! mini-redis server.
+//! hpfeeds-broker.
 //!
 //! This file is the entry point for the server implemented in the library. It
 //! performs command line parsing and passes the arguments on to
-//! `mini_redis::server`.
+//! `hpfeeds_broker::server`.
 //!
 //! The `clap` crate is used for parsing arguments.
 
-use mini_redis::{server, DEFAULT_PORT};
+use hpfeeds_broker::{server, DEFAULT_PORT};
 
 use clap::Parser;
 use tokio::net::TcpListener;
@@ -29,7 +29,7 @@ use tracing_subscriber::{
 };
 
 #[tokio::main]
-pub async fn main() -> mini_redis::Result<()> {
+pub async fn main() -> hpfeeds_broker::Result<()> {
     set_up_logging()?;
 
     let cli = Cli::parse();
@@ -44,14 +44,14 @@ pub async fn main() -> mini_redis::Result<()> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(name = "mini-redis-server", version, author, about = "A Redis server")]
+#[clap(name = "hpfeeds-broker", version, author, about = "A HPFeeds event broker")]
 struct Cli {
     #[clap(long)]
     port: Option<u16>,
 }
 
 #[cfg(not(feature = "otel"))]
-fn set_up_logging() -> mini_redis::Result<()> {
+fn set_up_logging() -> hpfeeds_broker::Result<()> {
     // See https://docs.rs/tracing for more info
     tracing_subscriber::fmt::try_init()
 }

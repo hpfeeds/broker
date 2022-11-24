@@ -1,9 +1,5 @@
-//! A minimal (i.e. very incomplete) implementation of a Redis server and
-//! client.
+//! A hpfeeds events broker.
 //!
-//! The purpose of this project is to provide a larger example of an
-//! asynchronous Rust project built with Tokio. Do not attempt to run this in
-//! production... seriously.
 //!
 //! # Layout
 //!
@@ -15,9 +11,6 @@
 //!
 //! * `server`: Redis server implementation. Includes a single `run` function
 //!   that takes a `TcpListener` and starts accepting redis client connections.
-//!
-//! * `client`: an asynchronous Redis client implementation. Demonstrates how to
-//!   build clients with Tokio.
 //!
 //! * `cmd`: implementations of the supported Redis commands.
 //!
@@ -64,7 +57,7 @@ pub const DEFAULT_PORT: u16 = 6379;
 /// it to be converted to `Box<dyn std::error::Error>`.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
-/// A specialized `Result` type for mini-redis operations.
+/// A specialized `Result` type for hpfeeds-broker operations.
 ///
 /// This is defined as a convenience.
 pub type Result<T> = std::result::Result<T, Error>;
