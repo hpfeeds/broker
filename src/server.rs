@@ -6,6 +6,7 @@
 use crate::{Connection, Db, DbDropGuard, Frame, Shutdown};
 
 use rand::RngCore;
+use socket2::{SockRef, TcpKeepalive};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
@@ -238,6 +239,13 @@ impl Listener {
             // The `accept` method internally attempts to recover errors, so an
             // error here is non-recoverable.
             let socket = self.accept().await?;
+
+            let sock = SockRef::from(&socket);
+            let ka = TcpKeepalive::new()
+                .with_time(std::time::Duration::from_secs(10))
+                .with_interval(std::time::Duration::from_secs(5))
+                .with_retries(3);
+            sock.set_tcp_keepalive(&ka)?;
 
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
