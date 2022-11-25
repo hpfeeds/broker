@@ -1,10 +1,9 @@
 use bytes::Bytes;
-use hpfeeds_broker::{server, Connection, Frame};
-
 use std::net::SocketAddr;
-// use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
 use tokio::net::{TcpListener, TcpStream};
-// use tokio::time::{self, Duration};
+
+use hpfeeds_broker::{server, Connection, Frame};
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
