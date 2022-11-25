@@ -5,7 +5,9 @@
 
 use crate::{Connection, Db, DbDropGuard, Frame, Shutdown};
 
+use constant_time_eq::constant_time_eq;
 use rand::RngCore;
+use sha1::{Digest, Sha1};
 use socket2::{SockRef, TcpKeepalive};
 use std::future::Future;
 use std::sync::Arc;
@@ -374,8 +376,20 @@ impl Handler {
             match frame {
                 Frame::Auth {
                     ident: _,
-                    signature: _,
-                } => {}
+                    signature,
+                } => {
+                    let mut hasher = Sha1::new();
+                    hasher.update(data);
+                    hasher.update(b"hello world");
+                    let result = hasher.finalize();
+
+                    if !constant_time_eq(&result, &signature[..]) {
+                        self.connection
+                            .write_frame(&Frame::Error("Signature incorrect".into()))
+                            .await?;
+                        return Ok(());
+                    }
+                }
                 Frame::Publish {
                     ident,
                     channel,
