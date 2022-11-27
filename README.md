@@ -27,19 +27,6 @@ single data format to be used for all the options mentioned above (and more).
 This eliminates the risk of vendor lock-in, since you can switch between
 providers if needed.
 
-### AWS X-Ray example
-
-To enable sending traces to X-Ray, use the `otel` feature:
-```
-RUST_LOG=debug cargo run --bin hpfeeds-broker-server --features otel
-```
-
-This will switch `tracing` to use `tracing-opentelemetry`. You will need to
-have a copy of AWSOtelCollector running on the same host.
-
-For demo purposes, you can follow the setup documented at
-https://github.com/aws-observability/aws-otel-collector/blob/main/docs/developers/docker-demo.md#run-a-single-aws-otel-collector-instance-in-docker
-
 ## License
 
 This project is licensed under the [MIT license](LICENSE).
