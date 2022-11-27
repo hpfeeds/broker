@@ -30,7 +30,7 @@ tracing = "0.1.37"
 tracing-futures = { version = "0.2.3" }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 # Implements the types defined in the OTel spec
-opentelemetry = { version = "0.17.0", optional = true }
+opentelemetry = { version = "0.18.0", optional = true }
 # Integration between the tracing crate and the opentelemetry crate
 tracing-opentelemetry = { version = "0.17.2", optional = true }
 # Allows you to send data to the OTel collector
