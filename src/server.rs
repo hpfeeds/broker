@@ -3,7 +3,7 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{auth, Connection, Db, DbDropGuard, Frame, Shutdown};
+use crate::{auth, sign, Connection, Db, DbDropGuard, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
@@ -387,10 +387,7 @@ impl Handler {
                 Frame::Auth { ident, signature } => {
                     if self.user.is_none() {
                         if let Some(user) = self.users.get(&ident) {
-                            let mut hasher = Sha1::new();
-                            hasher.update(data);
-                            hasher.update(&user.secret);
-                            let result = hasher.finalize();
+                            let result = sign(data, &user.secret);
 
                             if !constant_time_eq(&result, &signature[..]) {
                                 self.connection

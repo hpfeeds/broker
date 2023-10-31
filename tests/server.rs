@@ -6,7 +6,7 @@ use std::{
 
 use tokio::net::{TcpListener, TcpStream};
 
-use hpfeeds_broker::{server, Connection, Frame, User, UserSet, Users};
+use hpfeeds_broker::{server, sign, Connection, Frame, User, UserSet, Users};
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -37,16 +37,20 @@ async fn start_client(addr: SocketAddr) -> Connection {
     let info = conn.read_frame().await.unwrap().unwrap();
 
     match info {
-        Frame::Info {
-            broker_name,
-            nonce: _,
-        } => {
+        Frame::Info { broker_name, nonce } => {
             assert_eq!(broker_name, "hpfeeds-broker");
+
+            let signature = sign(nonce, "password");
+
+            conn.write_frame(&Frame::Auth {
+                ident: "bob".into(),
+                signature: Bytes::from(signature),
+            })
+            .await
+            .unwrap();
         }
         _ => panic!("Expected OP_INFO"),
     }
-
-    // FIXME: Here, need to send an OP_AUTH...
 
     conn
 }

@@ -20,6 +20,14 @@ pub struct Users {
     pub user_sets: Vec<UserSet>,
 }
 
+pub fn sign(data: [u8; 4], secret: &str) -> [u8; 20] {
+    let mut hasher = Sha1::new();
+    hasher.update(data);
+    hasher.update(secret);
+
+    hasher.finalize().into()
+}
+
 impl Users {
     pub fn new() -> Self {
         let mut users = BTreeMap::new();
