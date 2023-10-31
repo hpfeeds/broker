@@ -2,12 +2,12 @@ use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::Bytes;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::SocketAddr,
+    net::SocketAddr, sync::Arc,
 };
 
 use tokio::net::{TcpListener, TcpStream};
 
-use hpfeeds_broker::{server, Connection, Frame, User, UserSet, Users};
+use hpfeeds_broker::{server, Connection, Frame, User, UserSet, Users, sign};
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -33,7 +33,7 @@ async fn start_server() -> SocketAddr {
     let mut users = Users::new();
     users.user_sets.push(UserSet { users: records });
 
-    tokio::spawn(async move { server::run(users, listener, tokio::signal::ctrl_c()).await });
+    tokio::spawn(async move { server::run(Arc::new(users), listener, tokio::signal::ctrl_c()).await });
 
     addr
 }
