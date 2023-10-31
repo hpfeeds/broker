@@ -6,6 +6,8 @@
 //!
 //! The `clap` crate is used for parsing arguments.
 
+use std::sync::Arc;
+
 use hpfeeds_broker::{server, DEFAULT_PORT};
 
 use clap::Parser;
@@ -32,12 +34,17 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
     let cli = Cli::parse();
     let port = cli.port.unwrap_or(DEFAULT_PORT);
 
-    let users = hpfeeds_broker::Users::new();
+    let mut users = hpfeeds_broker::Users::new();
+    if let Some(paths) = cli.auth {
+        for path in paths {
+            users.add_user_set(path)?;
+        }
+    }
 
     // Bind a TCP listener
     let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
 
-    server::run(users, listener, signal::ctrl_c()).await;
+    server::run(Arc::new(users), listener, signal::ctrl_c()).await;
 
     Ok(())
 }
@@ -52,6 +59,7 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
 struct Cli {
     #[clap(long)]
     port: Option<u16>,
+    auth: Option<Vec<String>>,
 }
 
 #[cfg(not(feature = "otel"))]
