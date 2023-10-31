@@ -19,7 +19,7 @@
 //!   representation.
 
 mod auth;
-pub use auth::Users;
+pub use auth::{User, UserSet, Users};
 
 mod connection;
 pub use connection::Connection;

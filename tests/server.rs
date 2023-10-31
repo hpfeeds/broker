@@ -1,15 +1,32 @@
 use bytes::Bytes;
-use std::net::SocketAddr;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+};
 
 use tokio::net::{TcpListener, TcpStream};
 
-use hpfeeds_broker::{server, Connection, Frame};
+use hpfeeds_broker::{server, Connection, Frame, User, UserSet, Users};
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    tokio::spawn(async move { server::run(listener, tokio::signal::ctrl_c()).await });
+    let mut records = BTreeMap::new();
+    records.insert(
+        "bob".to_string(),
+        User {
+            owner: "bob".into(),
+            secret: "password".into(),
+            subchans: BTreeSet::new(),
+            pubchans: BTreeSet::new(),
+        },
+    );
+
+    let mut users = Users::new();
+    users.user_sets.push(UserSet { users: records });
+
+    tokio::spawn(async move { server::run(users, listener, tokio::signal::ctrl_c()).await });
 
     addr
 }
