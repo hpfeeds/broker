@@ -14,7 +14,7 @@ pub enum Frame {
     Error(String),
     Info {
         broker_name: String,
-        nonce: Bytes,
+        nonce: [u8; 4],
     },
     Auth {
         ident: String,
@@ -72,11 +72,11 @@ impl Frame {
             // OP_INFO
             1 => {
                 let broker_name = String::from_utf8(get_sized_string(src)?.to_vec())?;
-                let nonce = get_remaining(src, pos, size)?.to_vec();
+                let nonce = get_remaining(src, pos, size)?;
 
                 Ok(Frame::Info {
                     broker_name,
-                    nonce: nonce.into(),
+                    nonce: nonce.try_into().unwrap(),
                 })
             }
             // OP_AUTH

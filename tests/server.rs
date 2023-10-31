@@ -2,6 +2,7 @@ use bytes::Bytes;
 use std::{
     collections::{BTreeMap, BTreeSet},
     net::SocketAddr,
+    sync::Arc,
 };
 
 use tokio::net::{TcpListener, TcpStream};
@@ -12,21 +13,29 @@ async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
+    let mut subchans = BTreeSet::new();
+    subchans.insert("bar".into());
+
+    let mut pubchans = BTreeSet::new();
+    pubchans.insert("bar".into());
+
     let mut records = BTreeMap::new();
     records.insert(
         "bob".to_string(),
         User {
             owner: "bob".into(),
             secret: "password".into(),
-            subchans: BTreeSet::new(),
-            pubchans: BTreeSet::new(),
+            subchans: subchans,
+            pubchans: pubchans,
         },
     );
 
     let mut users = Users::new();
     users.user_sets.push(UserSet { users: records });
 
-    tokio::spawn(async move { server::run(users, listener, tokio::signal::ctrl_c()).await });
+    tokio::spawn(
+        async move { server::run(Arc::new(users), listener, tokio::signal::ctrl_c()).await },
+    );
 
     addr
 }
@@ -44,7 +53,7 @@ async fn start_client(addr: SocketAddr) -> Connection {
 
             conn.write_frame(&Frame::Auth {
                 ident: "bob".into(),
-                signature: Bytes::from(signature),
+                signature: Bytes::from_iter(signature),
             })
             .await
             .unwrap();

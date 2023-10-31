@@ -343,7 +343,7 @@ impl Handler {
         self.connection
             .write_frame(&Frame::Info {
                 broker_name: "hpfeeds-broker".into(),
-                nonce: data.to_vec().into(),
+                nonce: data.clone(),
             })
             .await?;
 
