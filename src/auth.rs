@@ -91,3 +91,9 @@ impl Users {
         None
     }
 }
+
+impl Default for Users {
+    fn default() -> Self {
+        Users::new()
+    }
+}
