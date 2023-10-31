@@ -7,7 +7,6 @@ use crate::{auth, sign, Connection, Db, DbDropGuard, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
-use sha1::{Digest, Sha1};
 use socket2::{SockRef, TcpKeepalive};
 use std::future::Future;
 use std::sync::Arc;
