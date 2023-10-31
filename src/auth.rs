@@ -40,19 +40,19 @@ impl Users {
 
             // If is starts with HPFEEDS_ and ends with _SECRET then none of these will fail
             // APART from HPFEEDS_SECRET, and thats not valid
-            let (_, rest) = key.split_once("_").unwrap();
-            let (rest, _) = rest.split_once("_").unwrap();
+            let (_, rest) = key.split_once('_').unwrap();
+            let (rest, _) = rest.split_once('_').unwrap();
 
             let owner = match std::env::var(format!("HPFEEDS_{}_OWNER", rest)) {
                 Ok(owner) => owner,
                 Err(_) => "".to_string(),
             };
             let pubchans = match std::env::var(format!("HPFEEDS_{}_PUBCHANS", rest)) {
-                Ok(pubchans) => pubchans.split(",").map(|v| v.to_string()).collect(),
+                Ok(pubchans) => pubchans.split(',').map(|v| v.to_string()).collect(),
                 Err(_) => BTreeSet::new(),
             };
             let subchans = match std::env::var(format!("HPFEEDS_{}_SUBCHANS", rest)) {
-                Ok(pubchans) => pubchans.split(",").map(|v| v.to_string()).collect(),
+                Ok(pubchans) => pubchans.split(',').map(|v| v.to_string()).collect(),
                 Err(_) => BTreeSet::new(),
             };
 

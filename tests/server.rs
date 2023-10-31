@@ -25,8 +25,8 @@ async fn start_server() -> SocketAddr {
         User {
             owner: "bob".into(),
             secret: "password".into(),
-            subchans: subchans,
-            pubchans: pubchans,
+            subchans,
+            pubchans,
         },
     );
 

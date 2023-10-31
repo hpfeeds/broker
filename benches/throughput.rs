@@ -1,16 +1,39 @@
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::Bytes;
-use std::net::SocketAddr;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+};
 
 use tokio::net::{TcpListener, TcpStream};
 
-use hpfeeds_broker::{server, Connection, Frame};
+use hpfeeds_broker::{server, Connection, Frame, User, UserSet, Users};
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    tokio::spawn(async move { server::run(listener, tokio::signal::ctrl_c()).await });
+    let mut subchans = BTreeSet::new();
+    subchans.insert("bar".into());
+
+    let mut pubchans = BTreeSet::new();
+    pubchans.insert("bar".into());
+
+    let mut records = BTreeMap::new();
+    records.insert(
+        "bob".to_string(),
+        User {
+            owner: "bob".into(),
+            secret: "password".into(),
+            subchans,
+            pubchans,
+        },
+    );
+
+    let mut users = Users::new();
+    users.user_sets.push(UserSet { users: records });
+
+    tokio::spawn(async move { server::run(users, listener, tokio::signal::ctrl_c()).await });
 
     addr
 }
@@ -21,16 +44,20 @@ async fn start_client(addr: SocketAddr) -> Connection {
     let info = conn.read_frame().await.unwrap().unwrap();
 
     match info {
-        Frame::Info {
-            broker_name,
-            nonce: _,
-        } => {
+        Frame::Info { broker_name, nonce } => {
             assert_eq!(broker_name, "hpfeeds-broker");
+
+            let signature = sign(nonce, "password");
+
+            conn.write_frame(&Frame::Auth {
+                ident: "bob".into(),
+                signature: Bytes::from_iter(signature),
+            })
+            .await
+            .unwrap();
         }
         _ => panic!("Expected OP_INFO"),
     }
-
-    // FIXME: Here, need to send an OP_AUTH...
 
     conn
 }
