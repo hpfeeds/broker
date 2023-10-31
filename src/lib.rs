@@ -18,6 +18,9 @@
 //!   intermediate representation between a "command" and the byte
 //!   representation.
 
+mod auth;
+pub use auth::Users;
+
 mod connection;
 pub use connection::Connection;
 

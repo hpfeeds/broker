@@ -3,7 +3,7 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{Connection, Db, DbDropGuard, Frame, Shutdown};
+use crate::{auth, Connection, Db, DbDropGuard, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
@@ -68,6 +68,8 @@ struct Listener {
     /// is safe to exit the server process.
     shutdown_complete_rx: mpsc::Receiver<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
+
+    users: Arc<auth::Users>,
 }
 
 /// Per-connection handler. Reads requests from `connection` and applies the
@@ -80,6 +82,10 @@ struct Handler {
     /// The implementation of the command is in the `cmd` module. Each command
     /// will need to interact with `db` in order to complete the work.
     db: Db,
+
+    users: Arc<auth::Users>,
+
+    user: Option<auth::User>,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
     /// implemented using a buffered `TcpStream`.
@@ -123,7 +129,7 @@ const MAX_CONNECTIONS: usize = 2500;
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(listener: TcpListener, shutdown: impl Future) {
+pub async fn run(users: Arc<auth::Users>, listener: TcpListener, shutdown: impl Future) {
     // When the provided `shutdown` future completes, we must send a shutdown
     // message to all active connections. We use a broadcast channel for this
     // purpose. The call below ignores the receiver of the broadcast pair, and when
@@ -134,6 +140,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
 
     // Initialize the listener state
     let mut server = Listener {
+        users,
         listener,
         db_holder: DbDropGuard::new(),
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
@@ -253,6 +260,9 @@ impl Listener {
             let mut handler = Handler {
                 // Get a handle to the shared database.
                 db: self.db_holder.db(),
+
+                users: self.users.clone(),
+                user: None,
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
@@ -374,53 +384,83 @@ impl Handler {
             debug!(?frame);
 
             match frame {
-                Frame::Auth {
-                    ident: _,
-                    signature,
-                } => {
-                    let mut hasher = Sha1::new();
-                    hasher.update(data);
-                    hasher.update(b"hello world");
-                    let result = hasher.finalize();
+                Frame::Auth { ident, signature } => {
+                    if self.user.is_none() {
+                        if let Some(user) = self.users.get(&ident) {
+                            let mut hasher = Sha1::new();
+                            hasher.update(data);
+                            hasher.update(&user.secret);
+                            let result = hasher.finalize();
 
-                    if !constant_time_eq(&result, &signature[..]) {
-                        self.connection
-                            .write_frame(&Frame::Error("Signature incorrect".into()))
-                            .await?;
-                        return Ok(());
+                            if !constant_time_eq(&result, &signature[..]) {
+                                self.connection
+                                    .write_frame(&Frame::Error("Authentication failed".into()))
+                                    .await?;
+                                return Ok(());
+                            }
+
+                            self.user = Some(user);
+                            continue;
+                        }
                     }
+
+                    self.connection
+                        .write_frame(&Frame::Error("Authentication failed".into()))
+                        .await?;
+                    return Ok(());
                 }
                 Frame::Publish {
                     ident,
                     channel,
                     payload,
                 } => {
-                    self.db.publish(
-                        &channel,
-                        Frame::Publish {
-                            ident,
-                            channel: channel.clone(),
-                            payload,
-                        },
-                    );
+                    if let Some(user) = &self.user {
+                        if user.pubchans.contains(&channel) {
+                            self.db.publish(
+                                &channel,
+                                Frame::Publish {
+                                    ident,
+                                    channel: channel.clone(),
+                                    payload,
+                                },
+                            );
+                            continue;
+                        }
+                    }
+
+                    self.connection
+                        .write_frame(&Frame::Error("Publish not authorized".into()))
+                        .await?;
+                    return Ok(());
                 }
                 Frame::Subscribe { ident: _, channel } => {
-                    let mut rx = self.db.subscribe(channel.clone());
+                    if let Some(user) = &self.user {
+                        if user.subchans.contains(&channel) {
+                            let mut rx = self.db.subscribe(channel.clone());
 
-                    // Subscribe to the channel.
-                    let rx = Box::pin(async_stream::stream! {
-                        loop {
-                            match rx.recv().await {
-                                Ok(msg) => yield msg,
-                                // If we lagged in consuming messages, just resume.
-                                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                                Err(_) => break,
-                            }
+                            // Subscribe to the channel.
+                            let rx = Box::pin(async_stream::stream! {
+                                loop {
+                                    match rx.recv().await {
+                                        Ok(msg) => yield msg,
+                                        // If we lagged in consuming messages, just resume.
+                                        Err(broadcast::error::RecvError::Lagged(_)) => {}
+                                        Err(_) => break,
+                                    }
+                                }
+                            });
+
+                            // Track subscription in this client's subscription set.
+                            subscriptions.insert(channel.clone(), rx);
+
+                            continue;
                         }
-                    });
+                    }
 
-                    // Track subscription in this client's subscription set.
-                    subscriptions.insert(channel.clone(), rx);
+                    self.connection
+                        .write_frame(&Frame::Error("Subscribe not authorized".into()))
+                        .await?;
+                    return Ok(());
                 }
                 Frame::Unsubscribe { ident: _, channel } => {
                     subscriptions.remove(&channel);

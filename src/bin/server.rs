@@ -32,10 +32,12 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
     let cli = Cli::parse();
     let port = cli.port.unwrap_or(DEFAULT_PORT);
 
+    let users = hpfeeds_broker::Users::new();
+
     // Bind a TCP listener
     let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
 
-    server::run(listener, signal::ctrl_c()).await;
+    server::run(users, listener, signal::ctrl_c()).await;
 
     Ok(())
 }
