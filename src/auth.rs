@@ -1,6 +1,6 @@
 use crate::Result;
 use serde::Deserialize;
-use sha1::Sha1;
+use sha1::{Digest, Sha1};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Deserialize, Clone, Debug)]
