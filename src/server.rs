@@ -26,7 +26,6 @@ use tracing::{debug, error, info, instrument};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
-#[derive(Debug)]
 pub struct Listener {
     /// Shared database handle.
     ///
@@ -39,6 +38,8 @@ pub struct Listener {
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
+
+    acceptor: Option<TlsAcceptor>,
 
     /// Limit the max number of connections.
     ///
@@ -200,7 +201,7 @@ impl Listener {
         users: Arc<crate::Users>,
         notify_shutdown: watch::Receiver<bool>,
     ) -> Self {
-        let _acceptor = match endpoint.listener_class {
+        let acceptor = match endpoint.listener_class {
             ListenerClass::Tls {
                 private_key,
                 certificate,
@@ -239,6 +240,7 @@ impl Listener {
         Listener {
             users: users.clone(),
             listener,
+            acceptor,
             db,
             limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown: notify_shutdown.clone(),
