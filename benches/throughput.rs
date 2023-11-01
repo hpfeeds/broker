@@ -13,7 +13,7 @@ use hpfeeds_broker::{parse_endpoint, server, sign, Connection, Frame, User, User
 
 async fn start_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let _addr = listener.local_addr().unwrap();
 
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());

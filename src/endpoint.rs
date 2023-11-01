@@ -22,12 +22,12 @@ pub struct Endpoint {
 
 pub fn parse_endpoint(endpoint: &str) -> Result<Endpoint> {
     // Parses a twisted style endpoint descriptor
-    let mut parts = endpoint.split(":");
+    let mut parts = endpoint.split(':');
     let first = parts.next().unwrap();
 
     let mut kv = BTreeMap::new();
     for part in parts {
-        let (k, v) = part.split_once("=").unwrap();
+        let (k, v) = part.split_once('=').unwrap();
         kv.insert(k.to_string(), v.to_string());
     }
 
