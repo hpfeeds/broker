@@ -29,7 +29,7 @@ pub struct Listener {
     ///
     /// This holds a wrapper around an `Arc`. The internal `Db` can be
     /// retrieved and passed into the per connection state (`Handler`).
-    db_holder: Db,
+    db: Db,
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
@@ -191,7 +191,7 @@ impl Listener {
         Listener {
             users: users.clone(),
             listener,
-            db_holder: Db::new(),
+            db: Db::new(),
             limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown: notify_shutdown.clone(),
             shutdown_complete_tx,
@@ -259,7 +259,7 @@ impl Listener {
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
                 // Get a handle to the shared database.
-                db: self.db_holder.clone(),
+                db: self.db.clone(),
 
                 users: self.users.clone(),
                 user: None,
