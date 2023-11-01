@@ -3,17 +3,23 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
+use crate::endpoint::ListenerClass;
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
+use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
+use std::fs::File;
+use std::io::{self, BufReader};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc, watch, Semaphore};
 use tokio::task::JoinSet;
 use tokio::time::{self, Duration};
+use tokio_rustls::TlsAcceptor;
 use tokio_stream::StreamExt;
 use tokio_stream::StreamMap;
 use tracing::{debug, error, info, instrument};
@@ -169,6 +175,24 @@ pub async fn run(listeners: Vec<Listener>) {
     }
 }
 
+fn load_certs(path: &str) -> std::io::Result<Vec<Certificate>> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let certs = rustls_pemfile::certs(&mut reader)?;
+    Ok(certs.into_iter().map(Certificate).collect())
+}
+
+fn load_keys(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
+    let file = File::open(&path)?;
+    let mut reader = BufReader::new(file);
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
+    match keys.len() {
+        0 => Err(format!("No PKCS8-encoded private key found in {path}").into()),
+        1 => Ok(PrivateKey(keys.remove(0))),
+        _ => Err(format!("More than one PKCS8-encoded private key found in {path}").into()),
+    }
+}
+
 impl Listener {
     pub async fn new(
         endpoint: Endpoint,
@@ -176,6 +200,29 @@ impl Listener {
         users: Arc<crate::Users>,
         notify_shutdown: watch::Receiver<bool>,
     ) -> Self {
+        let _acceptor = match endpoint.listener_class {
+            ListenerClass::Tls {
+                private_key,
+                certificate,
+                chain: _,
+            } => {
+                let certs = load_certs(&certificate).unwrap();
+                let key = load_keys(&private_key).unwrap();
+
+                let config = rustls::ServerConfig::builder()
+                    .with_safe_defaults()
+                    .with_no_client_auth()
+                    .with_single_cert(certs, key)
+                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))
+                    .unwrap();
+
+                let acceptor = TlsAcceptor::from(Arc::new(config));
+
+                Some(acceptor)
+            }
+            _ => None,
+        };
+
         // Bind a TCP listener
         let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
             .await
