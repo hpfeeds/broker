@@ -8,10 +8,9 @@
 
 use std::sync::Arc;
 
-use hpfeeds_broker::{server, DEFAULT_PORT};
+use hpfeeds_broker::{parse_endpoint, server, Endpoint};
 
 use clap::Parser;
-use tokio::net::TcpListener;
 use tokio::signal;
 
 #[cfg(feature = "otel")]
@@ -32,7 +31,6 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
     set_up_logging()?;
 
     let cli = Cli::parse();
-    let port = cli.port.unwrap_or(DEFAULT_PORT);
 
     let mut users = hpfeeds_broker::Users::new();
     if let Some(paths) = cli.auth {
@@ -41,10 +39,14 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
         }
     }
 
-    // Bind a TCP listener
-    let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
+    let endpoints = match cli.endpoint {
+        Some(endpoints) => endpoints,
+        None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000").unwrap()],
+    };
 
-    server::run(Arc::new(users), listener, signal::ctrl_c()).await;
+    println!("{:?}", endpoints);
+
+    server::run(Arc::new(users), endpoints, signal::ctrl_c()).await;
 
     Ok(())
 }
@@ -58,8 +60,9 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
 )]
 struct Cli {
     #[clap(long)]
-    port: Option<u16>,
     auth: Option<Vec<String>>,
+    #[arg(long, value_parser = parse_endpoint)]
+    endpoint: Option<Vec<Endpoint>>,
 }
 
 #[cfg(not(feature = "otel"))]

@@ -19,7 +19,7 @@
 //!   representation.
 
 mod endpoint;
-pub use endpoint::parse_endpoint;
+pub use endpoint::{parse_endpoint, Endpoint};
 
 mod auth;
 pub use auth::{sign, User, UserSet, Users};

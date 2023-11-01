@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::Result;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum ListenerClass {
     Tcp,
     Tls {
@@ -12,12 +12,12 @@ pub enum ListenerClass {
     },
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Endpoint {
-    listener_class: ListenerClass,
-    interface: String,
-    port: u32,
-    device: Option<String>,
+    pub listener_class: ListenerClass,
+    pub interface: String,
+    pub port: u32,
+    pub device: Option<String>,
 }
 
 pub fn parse_endpoint(endpoint: &str) -> Result<Endpoint> {
@@ -93,7 +93,10 @@ mod tests {
         );
 
         assert_eq!(
-            parse_endpoint("tls:port=30000:key=/app/var/tls/tls.key:cert=/app/var/tls/tls.crt:device=eth0").unwrap(),
+            parse_endpoint(
+                "tls:port=30000:key=/app/var/tls/tls.key:cert=/app/var/tls/tls.crt:device=eth0"
+            )
+            .unwrap(),
             Endpoint {
                 listener_class: ListenerClass::Tls {
                     certificate: "/app/var/tls/tls.crt".to_string(),
@@ -105,6 +108,5 @@ mod tests {
                 device: Some("eth0".to_string()),
             }
         );
-  
     }
 }

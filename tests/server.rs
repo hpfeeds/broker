@@ -1,18 +1,16 @@
 use bytes::Bytes;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     sync::Arc,
+    time::Duration,
 };
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
-use hpfeeds_broker::{server, sign, Connection, Frame, User, UserSet, Users};
+use hpfeeds_broker::{parse_endpoint, server, sign, Connection, Frame, User, UserSet, Users};
 
 async fn start_server() -> SocketAddr {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());
 
@@ -33,11 +31,15 @@ async fn start_server() -> SocketAddr {
     let mut users = Users::new();
     users.user_sets.push(UserSet { users: records });
 
+    let endpoints = vec![parse_endpoint("tcp:interface=127.0.0.1:port=20202").unwrap()];
+
     tokio::spawn(
-        async move { server::run(Arc::new(users), listener, tokio::signal::ctrl_c()).await },
+        async move { server::run(Arc::new(users), endpoints, tokio::signal::ctrl_c()).await },
     );
 
-    addr
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 20202)
 }
 
 async fn start_client(addr: SocketAddr) -> Connection {

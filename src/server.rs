@@ -3,7 +3,7 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{auth, sign, Connection, Db, DbDropGuard, Frame, Shutdown};
+use crate::{auth, sign, Connection, Db, DbDropGuard, Endpoint, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
@@ -128,7 +128,14 @@ const MAX_CONNECTIONS: usize = 2500;
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(users: Arc<auth::Users>, listener: TcpListener, shutdown: impl Future) {
+pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: impl Future) {
+    let endpoint = endpoints.first().unwrap();
+
+    // Bind a TCP listener
+    let listener = TcpListener::bind(&format!("127.0.0.1:{}", endpoint.port))
+        .await
+        .unwrap();
+
     // When the provided `shutdown` future completes, we must send a shutdown
     // message to all active connections. We use a broadcast channel for this
     // purpose. The call below ignores the receiver of the broadcast pair, and when
