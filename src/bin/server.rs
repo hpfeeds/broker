@@ -8,7 +8,11 @@
 
 use std::sync::Arc;
 
-use hpfeeds_broker::{parse_endpoint, server, Endpoint};
+use hpfeeds_broker::{
+    parse_endpoint,
+    server::{self, Listener},
+    Endpoint,
+};
 
 use clap::Parser;
 use tokio::signal;
@@ -38,13 +42,27 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
             users.add_user_set(path)?;
         }
     }
+    let users = Arc::new(users);
 
     let endpoints = match cli.endpoint {
         Some(endpoints) => endpoints,
         None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000").unwrap()],
     };
 
-    server::run(Arc::new(users), endpoints, signal::ctrl_c()).await;
+    let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
+    let mut listeners = vec![];
+    for endpoint in endpoints {
+        listeners.push(Listener::new(endpoint, users.clone(), notify_shutdown.clone()).await);
+    }
+    drop(notify_shutdown);
+
+    let handle = tokio::spawn(server::run(listeners));
+
+    signal::ctrl_c().await?;
+    notify_shutdown_tx.send(true)?;
+    drop(notify_shutdown_tx);
+
+    handle.await?;
 
     Ok(())
 }

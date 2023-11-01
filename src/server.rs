@@ -8,7 +8,7 @@ use crate::{auth, sign, Connection, Db, DbDropGuard, Endpoint, Frame, Shutdown};
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
 use socket2::{SockRef, TcpKeepalive};
-use std::future::Future;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, watch, Semaphore};
@@ -21,7 +21,7 @@ use tracing::{debug, error, info, instrument};
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
 #[derive(Debug)]
-struct Listener {
+pub struct Listener {
     /// Shared database handle.
     ///
     /// Contains the key / value store as well as the broadcast channels for
@@ -129,58 +129,12 @@ const MAX_CONNECTIONS: usize = 2500;
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: impl Future) {
+pub async fn run(listeners: Vec<Listener>) {
     let mut tasks = JoinSet::new();
 
-    let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
-
-    for endpoint in endpoints {
-        let server = Listener::new(endpoint, users.clone(), notify_shutdown.clone()).await;
+    for server in listeners {
         tasks.spawn(async move { server.run().await });
     }
-
-    drop(notify_shutdown);
-
-    // Concurrently run the server and listen for the `shutdown` signal. The
-    // server task runs until an error is encountered, so under normal
-    // circumstances, this `select!` statement runs until the `shutdown` signal
-    // is received.
-    //
-    // `select!` statements are written in the form of:
-    //
-    // ```
-
-    // <result of async op> = <async op> => <step to perform with result>
-    // ```
-    //
-    // All `<async op>` statements are executed concurrently. Once the **first**
-    // op completes, its associated `<step to perform with result>` is
-    // performed.
-    //
-    // The `select!` macro is a foundational building block for writing
-    // asynchronous Rust. See the API docs for more details:
-    //
-    // https://docs.rs/tokio/*/tokio/macro.select.html
-    tokio::select! {
-        res = tasks.join_next() => {
-            // If an error is received here, accepting connections from the TCP
-            // listener failed multiple times and the server is giving up and
-            // shutting down.
-            //
-            // Errors encountered when handling individual connections do not
-            // bubble up to this point.
-            if let Some(Err(err)) = res {
-                error!(cause = %err, "failed to accept");
-            }
-        }
-        _ = shutdown => {
-            // The shutdown signal has been received.
-            info!("shutting down");
-        }
-    }
-
-    notify_shutdown_tx.send(true).unwrap();
-    drop(notify_shutdown_tx);
 
     while let Some(task) = tasks.join_next().await {
         match task {
@@ -216,11 +170,15 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
 }
 
 impl Listener {
-    pub async fn new(endpoint: Endpoint, users: Arc<crate::Users>, notify_shutdown: watch::Receiver<bool>) -> Self {
+    pub async fn new(
+        endpoint: Endpoint,
+        users: Arc<crate::Users>,
+        notify_shutdown: watch::Receiver<bool>,
+    ) -> Self {
         // Bind a TCP listener
         let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
         // When the provided `shutdown` future completes, we must send a shutdown
         // message to all active connections. We use a broadcast channel for this
@@ -239,6 +197,10 @@ impl Listener {
             shutdown_complete_tx,
             shutdown_complete_rx,
         }
+    }
+
+    pub fn local_addr(&self) -> SocketAddr {
+        self.listener.local_addr().unwrap()
     }
 
     /// Run the server
@@ -283,7 +245,6 @@ impl Listener {
                 res = self.accept() => res.unwrap(),
                 _ = notify_shutdown.changed() => {
                     // The shutdown signal has been received.
-                    info!("shutting down");
                     return Ok(self)
                 }
             };

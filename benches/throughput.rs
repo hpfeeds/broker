@@ -2,19 +2,19 @@ use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::Bytes;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     sync::Arc,
-    time::Duration,
 };
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{net::TcpStream, sync::watch::Sender};
 
-use hpfeeds_broker::{parse_endpoint, server, sign, Connection, Frame, User, UserSet, Users};
+use hpfeeds_broker::{
+    parse_endpoint,
+    server::{self, Listener},
+    sign, Connection, Frame, User, UserSet, Users,
+};
 
-async fn start_server() -> SocketAddr {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let _addr = listener.local_addr().unwrap();
-
+async fn start_server() -> (SocketAddr, Sender<bool>) {
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());
 
@@ -35,15 +35,15 @@ async fn start_server() -> SocketAddr {
     let mut users = Users::new();
     users.user_sets.push(UserSet { users: records });
 
-    let endpoints = vec![parse_endpoint("tcp:interface=127.0.0.1:port=20202").unwrap()];
+    let (notify_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
-    tokio::spawn(
-        async move { server::run(Arc::new(users), endpoints, tokio::signal::ctrl_c()).await },
-    );
+    let endpoint = parse_endpoint("tcp:interface=127.0.0.1:port=0").unwrap();
+    let listener = Listener::new(endpoint, Arc::new(users), notify_shutdown).await;
+    let addr = listener.local_addr();
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::spawn(async move { server::run(vec![listener]).await });
 
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 20202)
+    (addr, notify_tx)
 }
 
 async fn start_client(addr: SocketAddr) -> Connection {
@@ -81,8 +81,8 @@ fn rt() -> tokio::runtime::Runtime {
 fn single_subscriber(bench: &mut Bencher) {
     let rt = rt();
 
-    let [mut p, mut s] = rt.block_on(async {
-        let server = start_server().await;
+    let (mut p, mut s, _guard) = rt.block_on(async {
+        let (server, guard) = start_server().await;
 
         let mut s = start_client(server).await;
 
@@ -105,7 +105,7 @@ fn single_subscriber(bench: &mut Bencher) {
 
         s.read_frame().await.unwrap().unwrap();
 
-        [p, s]
+        (p, s, guard)
     });
 
     bench.iter(|| {
@@ -126,8 +126,8 @@ fn single_subscriber(bench: &mut Bencher) {
 fn twenty_subscribers(bench: &mut Bencher) {
     let rt = rt();
 
-    let (mut p, mut subscribers) = rt.block_on(async {
-        let server = start_server().await;
+    let (mut p, mut subscribers, _guard) = rt.block_on(async {
+        let (server, guard) = start_server().await;
 
         let mut subscribers = vec![];
         for _i in 1..20 {
@@ -151,7 +151,7 @@ fn twenty_subscribers(bench: &mut Bencher) {
         .await
         .unwrap();
 
-        (p, subscribers)
+        (p, subscribers, guard)
     });
 
     bench.iter(|| {

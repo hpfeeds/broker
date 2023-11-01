@@ -1,16 +1,19 @@
 use bytes::Bytes;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     sync::Arc,
-    time::Duration,
 };
 
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::watch::Sender};
 
-use hpfeeds_broker::{parse_endpoint, server, sign, Connection, Frame, User, UserSet, Users};
+use hpfeeds_broker::{
+    parse_endpoint,
+    server::{self, Listener},
+    sign, Connection, Frame, User, UserSet, Users,
+};
 
-async fn start_server() -> SocketAddr {
+async fn start_server() -> (SocketAddr, Sender<bool>) {
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());
 
@@ -31,15 +34,15 @@ async fn start_server() -> SocketAddr {
     let mut users = Users::new();
     users.user_sets.push(UserSet { users: records });
 
-    let endpoints = vec![parse_endpoint("tcp:interface=127.0.0.1:port=20202").unwrap()];
+    let (shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
-    tokio::spawn(
-        async move { server::run(Arc::new(users), endpoints, tokio::signal::ctrl_c()).await },
-    );
+    let endpoint = parse_endpoint("tcp:interface=127.0.0.1:port=0").unwrap();
+    let listener = Listener::new(endpoint, Arc::new(users), notify_shutdown).await;
+    let addr = listener.local_addr();
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::spawn(async move { server::run(vec![listener]).await });
 
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 20202)
+    (addr, shutdown_tx)
 }
 
 async fn start_client(addr: SocketAddr) -> Connection {
@@ -102,7 +105,7 @@ async fn pub_sub() {
     sub1 should see the 2nd and 3rd publish.
     sub2 should see the 3rd publish.
     */
-    let addr = start_server().await;
+    let (addr, _notify) = start_server().await;
 
     let mut conn = start_client(addr).await;
     conn.write_frame(&Frame::Publish {
@@ -171,7 +174,7 @@ async fn nsubscribe() {
     /*
     Test unsubscribing and resubscribing
     */
-    let addr = start_server().await;
+    let (addr, _notify) = start_server().await;
 
     let mut conn = start_client(addr).await;
     conn.write_frame(&Frame::Publish {
