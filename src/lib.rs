@@ -18,6 +18,9 @@
 //!   intermediate representation between a "command" and the byte
 //!   representation.
 
+mod endpoint;
+pub use endpoint::parse_endpoint;
+
 mod auth;
 pub use auth::{sign, User, UserSet, Users};
 
