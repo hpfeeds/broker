@@ -31,7 +31,7 @@ pub mod frame;
 pub use frame::Frame;
 
 mod db;
-use db::Db;
+pub use db::Db;
 
 pub mod server;
 

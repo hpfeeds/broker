@@ -18,7 +18,7 @@ use crate::Frame;
 /// runs until all instances of `Db` are dropped, at which point the task
 /// terminates.
 #[derive(Debug, Clone)]
-pub(crate) struct Db {
+pub struct Db {
     /// Handle to shared state. The background task will also have an
     /// `Arc<Shared>`.
     shared: Arc<Shared>,
@@ -51,7 +51,7 @@ struct State {
 impl Db {
     /// Create a new, empty, `Db` instance. Allocates shared state and spawns a
     /// background task to manage key expiration.
-    pub(crate) fn new() -> Db {
+    pub fn new() -> Db {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 pub_sub: HashMap::new(),

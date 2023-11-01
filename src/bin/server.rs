@@ -11,7 +11,7 @@ use std::sync::Arc;
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
-    Endpoint,
+    Db, Endpoint,
 };
 
 use clap::Parser;
@@ -36,6 +36,8 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
 
     let cli = Cli::parse();
 
+    let db = Db::new();
+
     let mut users = hpfeeds_broker::Users::new();
     if let Some(paths) = cli.auth {
         for path in paths {
@@ -52,7 +54,9 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
     let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
     let mut listeners = vec![];
     for endpoint in endpoints {
-        listeners.push(Listener::new(endpoint, users.clone(), notify_shutdown.clone()).await);
+        listeners.push(
+            Listener::new(endpoint, db.clone(), users.clone(), notify_shutdown.clone()).await,
+        );
     }
     drop(notify_shutdown);
 

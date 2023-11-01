@@ -10,10 +10,12 @@ use tokio::{net::TcpStream, sync::watch::Sender};
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
-    sign, Connection, Frame, User, UserSet, Users,
+    sign, Connection, Db, Frame, User, UserSet, Users,
 };
 
 async fn start_server() -> (SocketAddr, Sender<bool>) {
+    let db = Db::new();
+
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());
 
@@ -37,7 +39,7 @@ async fn start_server() -> (SocketAddr, Sender<bool>) {
     let (shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
     let endpoint = parse_endpoint("tcp:interface=127.0.0.1:port=0").unwrap();
-    let listener = Listener::new(endpoint, Arc::new(users), notify_shutdown).await;
+    let listener = Listener::new(endpoint, db, Arc::new(users), notify_shutdown).await;
     let addr = listener.local_addr();
 
     tokio::spawn(async move { server::run(vec![listener]).await });

@@ -172,6 +172,7 @@ pub async fn run(listeners: Vec<Listener>) {
 impl Listener {
     pub async fn new(
         endpoint: Endpoint,
+        db: Db,
         users: Arc<crate::Users>,
         notify_shutdown: watch::Receiver<bool>,
     ) -> Self {
@@ -191,7 +192,7 @@ impl Listener {
         Listener {
             users: users.clone(),
             listener,
-            db: Db::new(),
+            db,
             limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown: notify_shutdown.clone(),
             shutdown_complete_tx,
