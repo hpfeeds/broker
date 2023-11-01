@@ -56,11 +56,6 @@ struct State {
     /// The pub/sub key-space. Redis uses a **separate** key space for key-value
     /// and pub/sub. `hpfeeds-broker` handles this by using a separate `HashMap`.
     pub_sub: HashMap<String, broadcast::Sender<Frame>>,
-
-    /// True when the Db instance is shutting down. This happens when all `Db`
-    /// values drop. Setting this to `true` signals to the background task to
-    /// exit.
-    shutdown: bool,
 }
 
 /// Entry in the key-value store
@@ -81,13 +76,6 @@ impl DbDropGuard {
     }
 }
 
-impl Drop for DbDropGuard {
-    fn drop(&mut self) {
-        // Signal the 'Db' instance to shut down the task that purges expired keys
-        self.db.shutdown_purge_task();
-    }
-}
-
 impl Db {
     /// Create a new, empty, `Db` instance. Allocates shared state and spawns a
     /// background task to manage key expiration.
@@ -95,7 +83,6 @@ impl Db {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 pub_sub: HashMap::new(),
-                shutdown: false,
             }),
         });
 
@@ -150,15 +137,5 @@ impl Db {
             // If there is no entry for the channel key, then there are no
             // subscribers. In this case, return `0`.
             .unwrap_or(0)
-    }
-
-    /// Signals the purge background task to shut down. This is called by the
-    /// `DbShutdown`s `Drop` implementation.
-    fn shutdown_purge_task(&self) {
-        // The background task must be signaled to shut down. This is done by
-        // setting `State::shutdown` to `true` and signalling the task.
-        let mut state = self.shared.state.lock().unwrap();
-        state.shutdown = true;
-        drop(state);
     }
 }
