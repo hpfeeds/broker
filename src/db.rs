@@ -5,16 +5,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::Frame;
 
-/// A wrapper around a `Db` instance. This exists to allow orderly cleanup
-/// of the `Db` by signalling the background purge task to shut down when
-/// this struct is dropped.
-#[derive(Debug)]
-pub(crate) struct DbDropGuard {
-    /// The `Db` instance that will be shut down when this `DbHolder` struct
-    /// is dropped.
-    db: Db,
-}
-
 /// Server state shared across all connections.
 ///
 /// `Db` contains a `HashMap` storing the key/value data and all
@@ -56,24 +46,6 @@ struct State {
     /// The pub/sub key-space. Redis uses a **separate** key space for key-value
     /// and pub/sub. `hpfeeds-broker` handles this by using a separate `HashMap`.
     pub_sub: HashMap<String, broadcast::Sender<Frame>>,
-}
-
-/// Entry in the key-value store
-#[derive(Debug)]
-struct Entry {}
-
-impl DbDropGuard {
-    /// Create a new `DbHolder`, wrapping a `Db` instance. When this is dropped
-    /// the `Db`'s purge task will be shut down.
-    pub(crate) fn new() -> DbDropGuard {
-        DbDropGuard { db: Db::new() }
-    }
-
-    /// Get the shared database. Internally, this is an
-    /// `Arc`, so a clone only increments the ref count.
-    pub(crate) fn db(&self) -> Db {
-        self.db.clone()
-    }
 }
 
 impl Db {

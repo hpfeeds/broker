@@ -3,7 +3,7 @@
 //! Provides an async `run` function that listens for inbound connections,
 //! spawning a task per connection.
 
-use crate::{auth, sign, Connection, Db, DbDropGuard, Endpoint, Frame, Shutdown};
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, Shutdown};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
@@ -29,7 +29,7 @@ pub struct Listener {
     ///
     /// This holds a wrapper around an `Arc`. The internal `Db` can be
     /// retrieved and passed into the per connection state (`Handler`).
-    db_holder: DbDropGuard,
+    db_holder: Db,
 
     /// TCP listener supplied by the `run` caller.
     listener: TcpListener,
@@ -191,7 +191,7 @@ impl Listener {
         Listener {
             users: users.clone(),
             listener,
-            db_holder: DbDropGuard::new(),
+            db_holder: Db::new(),
             limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown: notify_shutdown.clone(),
             shutdown_complete_tx,
@@ -259,7 +259,7 @@ impl Listener {
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
                 // Get a handle to the shared database.
-                db: self.db_holder.db(),
+                db: self.db_holder.clone(),
 
                 users: self.users.clone(),
                 user: None,

@@ -32,7 +32,6 @@ pub use frame::Frame;
 
 mod db;
 use db::Db;
-use db::DbDropGuard;
 
 pub mod server;
 
