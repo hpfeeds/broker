@@ -1,4 +1,4 @@
-use tokio::sync::broadcast;
+use tokio::sync::watch;
 
 /// Listens for the server shutdown signal.
 ///
@@ -15,12 +15,12 @@ pub(crate) struct Shutdown {
     shutdown: bool,
 
     /// The receive half of the channel used to listen for shutdown.
-    notify: broadcast::Receiver<()>,
+    notify: watch::Receiver<bool>,
 }
 
 impl Shutdown {
     /// Create a new `Shutdown` backed by the given `broadcast::Receiver`.
-    pub(crate) fn new(notify: broadcast::Receiver<()>) -> Shutdown {
+    pub(crate) fn new(notify: watch::Receiver<bool>) -> Shutdown {
         Shutdown {
             shutdown: false,
             notify,
@@ -41,7 +41,7 @@ impl Shutdown {
         }
 
         // Cannot receive a "lag error" as only one value is ever sent.
-        let _ = self.notify.recv().await;
+        let _ = self.notify.changed().await;
 
         // Remember that the signal has been received.
         self.shutdown = true;

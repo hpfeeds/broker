@@ -11,7 +11,8 @@ use socket2::{SockRef, TcpKeepalive};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, Semaphore};
+use tokio::sync::{broadcast, mpsc, watch, Semaphore};
+use tokio::task::JoinSet;
 use tokio::time::{self, Duration};
 use tokio_stream::StreamExt;
 use tokio_stream::StreamMap;
@@ -51,7 +52,7 @@ struct Listener {
     /// handle. When a graceful shutdown is initiated, a `()` value is sent via
     /// the broadcast::Sender. Each active connection receives it, reaches a
     /// safe terminal state, and completes the task.
-    notify_shutdown: broadcast::Sender<()>,
+    notify_shutdown: watch::Receiver<bool>,
 
     /// Used as part of the graceful shutdown process to wait for client
     /// connections to complete processing.
@@ -129,31 +130,38 @@ const MAX_CONNECTIONS: usize = 2500;
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
 pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: impl Future) {
-    let endpoint = endpoints.first().unwrap();
+    let mut tasks = JoinSet::new();
 
-    // Bind a TCP listener
-    let listener = TcpListener::bind(&format!("127.0.0.1:{}", endpoint.port))
-        .await
-        .unwrap();
+    let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
-    // When the provided `shutdown` future completes, we must send a shutdown
-    // message to all active connections. We use a broadcast channel for this
-    // purpose. The call below ignores the receiver of the broadcast pair, and when
-    // a receiver is needed, the subscribe() method on the sender is used to create
-    // one.
-    let (notify_shutdown, _) = broadcast::channel(1);
-    let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    for endpoint in &endpoints {
+        // Bind a TCP listener
+        let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
+            .await
+            .unwrap();
 
-    // Initialize the listener state
-    let mut server = Listener {
-        users,
-        listener,
-        db_holder: DbDropGuard::new(),
-        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
-        notify_shutdown,
-        shutdown_complete_tx,
-        shutdown_complete_rx,
-    };
+        // When the provided `shutdown` future completes, we must send a shutdown
+        // message to all active connections. We use a broadcast channel for this
+        // purpose. The call below ignores the receiver of the broadcast pair, and when
+        // a receiver is needed, the subscribe() method on the sender is used to create
+        // one.
+        let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+
+        // Initialize the listener state
+        let server = Listener {
+            users: users.clone(),
+            listener,
+            db_holder: DbDropGuard::new(),
+            limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            notify_shutdown: notify_shutdown.clone(),
+            shutdown_complete_tx,
+            shutdown_complete_rx,
+        };
+
+        tasks.spawn(async move { server.run().await });
+    }
+
+    drop(notify_shutdown);
 
     // Concurrently run the server and listen for the `shutdown` signal. The
     // server task runs until an error is encountered, so under normal
@@ -163,6 +171,7 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
     // `select!` statements are written in the form of:
     //
     // ```
+
     // <result of async op> = <async op> => <step to perform with result>
     // ```
     //
@@ -175,14 +184,14 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
     //
     // https://docs.rs/tokio/*/tokio/macro.select.html
     tokio::select! {
-        res = server.run() => {
+        res = tasks.join_next() => {
             // If an error is received here, accepting connections from the TCP
             // listener failed multiple times and the server is giving up and
             // shutting down.
             //
             // Errors encountered when handling individual connections do not
             // bubble up to this point.
-            if let Err(err) = res {
+            if let Some(Err(err)) = res {
                 error!(cause = %err, "failed to accept");
             }
         }
@@ -192,27 +201,40 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
         }
     }
 
-    // Extract the `shutdown_complete` receiver and transmitter
-    // explicitly drop `shutdown_transmitter`. This is important, as the
-    // `.await` below would otherwise never complete.
-    let Listener {
-        mut shutdown_complete_rx,
-        shutdown_complete_tx,
-        notify_shutdown,
-        ..
-    } = server;
+    notify_shutdown_tx.send(true).unwrap();
+    drop(notify_shutdown_tx);
 
-    // When `notify_shutdown` is dropped, all tasks which have `subscribe`d will
-    // receive the shutdown signal and can exit
-    drop(notify_shutdown);
-    // Drop final `Sender` so the `Receiver` below can complete
-    drop(shutdown_complete_tx);
+    while let Some(task) = tasks.join_next().await {
+        match task {
+            Ok(result) => match result {
+                Ok(listener) => {
+                    // Extract the `shutdown_complete` receiver and transmitter
+                    // explicitly drop `shutdown_transmitter`. This is important, as the
+                    // `.await` below would otherwise never complete.
+                    let Listener {
+                        mut shutdown_complete_rx,
+                        shutdown_complete_tx,
+                        ..
+                    } = listener;
 
-    // Wait for all active connections to finish processing. As the `Sender`
-    // handle held by the listener has been dropped above, the only remaining
-    // `Sender` instances are held by connection handler tasks. When those drop,
-    // the `mpsc` channel will close and `recv()` will return `None`.
-    let _ = shutdown_complete_rx.recv().await;
+                    // Drop final `Sender` so the `Receiver` below can complete
+                    drop(shutdown_complete_tx);
+
+                    // Wait for all active connections to finish processing. As the `Sender`
+                    // handle held by the listener has been dropped above, the only remaining
+                    // `Sender` instances are held by connection handler tasks. When those drop,
+                    // the `mpsc` channel will close and `recv()` will return `None`.
+                    let _ = shutdown_complete_rx.recv().await;
+                }
+                Err(e) => {
+                    error!("Error occurred during shutdown: {:?}", e);
+                }
+            },
+            Err(e) => {
+                error!("Error occurred during shutdown: {:?}", e);
+            }
+        }
+    }
 }
 
 impl Listener {
@@ -231,7 +253,7 @@ impl Listener {
     /// The process is not able to detect when a transient error resolves
     /// itself. One strategy for handling this is to implement a back off
     /// strategy, which is what we do here.
-    async fn run(&mut self) -> crate::Result<()> {
+    async fn run(mut self) -> crate::Result<Self> {
         info!("accepting inbound connections");
 
         loop {
@@ -253,7 +275,15 @@ impl Listener {
             // Accept a new socket. This will attempt to perform error handling.
             // The `accept` method internally attempts to recover errors, so an
             // error here is non-recoverable.
-            let socket = self.accept().await?;
+            let mut notify_shutdown = self.notify_shutdown.clone();
+            let socket = tokio::select! {
+                res = self.accept() => res.unwrap(),
+                _ = notify_shutdown.changed() => {
+                    // The shutdown signal has been received.
+                    info!("shutting down");
+                    return Ok(self)
+                }
+            };
 
             let sock = SockRef::from(&socket);
             let ka = TcpKeepalive::new()
@@ -275,7 +305,7 @@ impl Listener {
                 connection: Connection::new(socket),
 
                 // Receive shutdown notifications.
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+                shutdown: Shutdown::new(self.notify_shutdown.clone()),
 
                 // Notifies the receiver half once all clones are
                 // dropped.
