@@ -118,7 +118,7 @@ struct Handler {
 /// A real application will want to make this value configurable, but for this
 /// example, it is hard coded.
 ///
-const MAX_CONNECTIONS: usize = 2500;
+const MAX_CONNECTIONS: usize = 4000;
 
 /// Run the broker.
 ///
