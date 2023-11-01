@@ -44,8 +44,6 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
         None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000").unwrap()],
     };
 
-    println!("{:?}", endpoints);
-
     server::run(Arc::new(users), endpoints, signal::ctrl_c()).await;
 
     Ok(())

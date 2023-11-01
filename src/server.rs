@@ -134,30 +134,8 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
 
     let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
-    for endpoint in &endpoints {
-        // Bind a TCP listener
-        let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
-            .await
-            .unwrap();
-
-        // When the provided `shutdown` future completes, we must send a shutdown
-        // message to all active connections. We use a broadcast channel for this
-        // purpose. The call below ignores the receiver of the broadcast pair, and when
-        // a receiver is needed, the subscribe() method on the sender is used to create
-        // one.
-        let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
-
-        // Initialize the listener state
-        let server = Listener {
-            users: users.clone(),
-            listener,
-            db_holder: DbDropGuard::new(),
-            limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
-            notify_shutdown: notify_shutdown.clone(),
-            shutdown_complete_tx,
-            shutdown_complete_rx,
-        };
-
+    for endpoint in endpoints {
+        let server = Listener::new(endpoint, users.clone(), notify_shutdown.clone()).await;
         tasks.spawn(async move { server.run().await });
     }
 
@@ -238,6 +216,31 @@ pub async fn run(users: Arc<auth::Users>, endpoints: Vec<Endpoint>, shutdown: im
 }
 
 impl Listener {
+    pub async fn new(endpoint: Endpoint, users: Arc<crate::Users>, notify_shutdown: watch::Receiver<bool>) -> Self {
+        // Bind a TCP listener
+        let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
+        .await
+        .unwrap();
+
+        // When the provided `shutdown` future completes, we must send a shutdown
+        // message to all active connections. We use a broadcast channel for this
+        // purpose. The call below ignores the receiver of the broadcast pair, and when
+        // a receiver is needed, the subscribe() method on the sender is used to create
+        // one.
+        let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+
+        // Initialize the listener state
+        Listener {
+            users: users.clone(),
+            listener,
+            db_holder: DbDropGuard::new(),
+            limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+            notify_shutdown: notify_shutdown.clone(),
+            shutdown_complete_tx,
+            shutdown_complete_rx,
+        }
+    }
+
     /// Run the server
     ///
     /// Listen for inbound connections. For each inbound connection, spawn a
