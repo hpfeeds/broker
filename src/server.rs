@@ -320,6 +320,8 @@ impl Listener {
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
 
+            let connection_lost = self.db.metrics.connection_lost.clone();
+
             // Spawn a new task to process the connections. Tokio tasks are like
             // asynchronous green threads and are executed concurrently.
             tokio::spawn(async move {
@@ -327,6 +329,9 @@ impl Listener {
                 if let Err(err) = handler.run().await {
                     error!(cause = ?err, "connection error");
                 }
+
+                connection_lost.inc();
+
                 // Move the permit into the task and drop it after completion.
                 // This returns the permit back to the semaphore.
                 drop(permit);

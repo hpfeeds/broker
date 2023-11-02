@@ -28,6 +28,7 @@ pub struct IdentChanLabels {
 pub struct BrokerMetrics {
     pub connection_made: Counter,
     pub connection_ready: Family<IdentLabels, Counter>,
+    pub connection_lost: Counter,
 
     pub receive_publish_count: Family<IdentChanLabels, Counter>,
 
@@ -72,9 +73,17 @@ impl BrokerMetrics {
             connection_ready.clone(),
         );
 
+        let connection_lost = Counter::default();
+        registry.register(
+            "connection_lost",
+            "Number of connections lost",
+            connection_lost.clone(),
+        );
+
         BrokerMetrics {
             connection_made,
             connection_ready,
+            connection_lost,
 
             receive_publish_count,
 
