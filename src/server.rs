@@ -355,7 +355,12 @@ impl Listener {
             // Perform the accept operation. If a socket is successfully
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
-                Ok((socket, _)) => return Ok(socket),
+                Ok((socket, _)) => {
+                    return Ok(match self.acceptor {
+                        Some(acceptor) => acceptor.accept(socket).await?,
+                        None => socket,
+                    })
+                }
                 Err(err) => {
                     if backoff > 64 {
                         // Accept has failed too many times. Return the error.
