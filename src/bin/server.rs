@@ -8,30 +8,15 @@
 
 use std::sync::Arc;
 
+use clap::Parser;
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
     start_metrics_server, Db, Endpoint,
 };
-
-use clap::Parser;
-use tokio::signal;
-
-#[cfg(feature = "otel")]
-// To be able to set the XrayPropagator
-use opentelemetry::global;
-#[cfg(feature = "otel")]
-// To configure certain options such as sampling rate
-use opentelemetry::sdk::trace as sdktrace;
 use prometheus_client::{metrics::counter::Counter, registry::Registry};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-#[cfg(feature = "otel")]
-// The `Ext` traits are to allow the Registry to accept the
-// OpenTelemetry-specific types (such as `OpenTelemetryLayer`)
-use tracing_subscriber::{
-    fmt, layer::SubscriberExt, util::SubscriberInitExt, util::TryInitError, EnvFilter,
-};
+use tokio::signal;
 
 #[tokio::main]
 pub async fn main() -> hpfeeds_broker::Result<()> {
@@ -103,33 +88,7 @@ struct Cli {
     endpoint: Option<Vec<Endpoint>>,
 }
 
-#[cfg(not(feature = "otel"))]
 fn set_up_logging() -> hpfeeds_broker::Result<()> {
     // See https://docs.rs/tracing for more info
     tracing_subscriber::fmt::try_init()
-}
-
-#[cfg(feature = "otel")]
-fn set_up_logging() -> Result<(), TryInitError> {
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-        .with_trace_config(sdktrace::config().with_sampler(sdktrace::Sampler::AlwaysOn))
-        .install_simple()
-        .expect("Unable to initialize OtlpPipeline");
-
-    // Create a tracing layer with the configured tracer
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-
-    // Parse an `EnvFilter` configuration from the `RUST_LOG`
-    // environment variable.
-    let filter = EnvFilter::from_default_env();
-
-    // Use the tracing subscriber `Registry`, or any other subscriber
-    // that impls `LookupSpan`
-    tracing_subscriber::registry()
-        .with(opentelemetry)
-        .with(filter)
-        .with(fmt::Layer::default())
-        .try_init()
 }
