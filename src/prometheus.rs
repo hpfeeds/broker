@@ -2,11 +2,11 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use prometheus_client::{encoding::text::encode, metrics::counter::Counter, registry::Registry};
+use prometheus_client::{encoding::text::encode, registry::Registry};
 use std::{
     future::Future,
     io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{SocketAddr},
     pin::Pin,
     sync::Arc,
 };
