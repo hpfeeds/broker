@@ -14,10 +14,7 @@ use hpfeeds_broker::{
     server::{self, Listener},
     start_metrics_server, Db, Endpoint,
 };
-use prometheus_client::{
-    metrics::{counter::Counter, family::Family},
-    registry::Registry,
-};
+use prometheus_client::registry::Registry;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::signal;
 

@@ -8,9 +8,7 @@ use crate::prometheus::IdentLabels;
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
 use constant_time_eq::constant_time_eq;
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::registry::Registry;
+
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
@@ -493,7 +491,7 @@ impl Handler {
                                 .metrics
                                 .receive_publish_count
                                 .get_or_create(&IdentChanLabels {
-                                    ident: ident,
+                                    ident,
                                     chan: channel,
                                 })
                                 .inc();
