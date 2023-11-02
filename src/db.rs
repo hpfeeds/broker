@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
+use crate::frame::Publish;
 use crate::prometheus::BrokerMetrics;
-use crate::Frame;
 
 /// Server state shared across all connections.
 ///
@@ -46,7 +46,7 @@ struct Shared {
 struct State {
     /// The pub/sub key-space. Redis uses a **separate** key space for key-value
     /// and pub/sub. `hpfeeds-broker` handles this by using a separate `HashMap`.
-    pub_sub: HashMap<String, broadcast::Sender<Frame>>,
+    pub_sub: HashMap<String, broadcast::Sender<Publish>>,
 }
 
 impl Db {
@@ -69,7 +69,7 @@ impl Db {
     ///
     /// The returned `Receiver` is used to receive values broadcast by `PUBLISH`
     /// commands.
-    pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Frame> {
+    pub(crate) fn subscribe(&self, key: String) -> broadcast::Receiver<Publish> {
         use std::collections::hash_map::Entry;
 
         // Acquire the mutex
@@ -100,7 +100,7 @@ impl Db {
 
     /// Publish a message to the channel. Returns the number of subscribers
     /// listening on the channel.
-    pub(crate) fn publish(&self, key: &str, value: Frame) -> usize {
+    pub(crate) fn publish(&self, key: &str, value: Publish) -> usize {
         let state = self.shared.state.lock().unwrap();
 
         state

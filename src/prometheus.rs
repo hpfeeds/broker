@@ -30,15 +30,32 @@ pub struct BrokerMetrics {
     pub connection_ready: Family<IdentLabels, Counter>,
 
     pub receive_publish_count: Family<IdentChanLabels, Counter>,
+
+    pub publish_sent: Family<IdentChanLabels, Counter>,
+    pub publish_lag: Family<IdentChanLabels, Counter>,
 }
 
 impl BrokerMetrics {
     pub fn new(registry: &mut Registry) -> Self {
         let receive_publish_count = Family::<IdentChanLabels, Counter>::default();
         registry.register(
-            "receive_publish_count",
+            "publish_received",
             "Number of events received by broker for a channel",
             receive_publish_count.clone(),
+        );
+
+        let publish_sent = Family::<IdentChanLabels, Counter>::default();
+        registry.register(
+            "publish_sent",
+            "Number of events received by broker for a channel",
+            publish_sent.clone(),
+        );
+
+        let publish_lag = Family::<IdentChanLabels, Counter>::default();
+        registry.register(
+            "publish_lag",
+            "Number of events dropped because of backpressure",
+            publish_lag.clone(),
         );
 
         let connection_made = Counter::default();
@@ -60,6 +77,9 @@ impl BrokerMetrics {
             connection_ready,
 
             receive_publish_count,
+
+            publish_lag,
+            publish_sent,
         }
     }
 }

@@ -9,6 +9,7 @@ use std::{
 use tokio::{net::TcpStream, sync::watch::Sender};
 
 use hpfeeds_broker::{
+    frame::{Auth, Info, Publish, Subscribe, Unsubscribe},
     parse_endpoint,
     server::{self, Listener},
     sign, Connection, Db, Frame, User, UserSet, Users, Writer,
@@ -57,15 +58,15 @@ async fn start_client(addr: SocketAddr) -> Connection {
     let info = conn.read_frame().await.unwrap().unwrap();
 
     match info {
-        Frame::Info { broker_name, nonce } => {
+        Frame::Info(Info { broker_name, nonce }) => {
             assert_eq!(broker_name, "hpfeeds-broker");
 
             let signature = sign(nonce, "password");
 
-            conn.write_frame(&Frame::Auth {
+            conn.write_frame(&Frame::Auth(Auth {
                 ident: "bob".into(),
                 signature: Bytes::from_iter(signature),
-            })
+            }))
             .await
             .unwrap();
         }
@@ -82,11 +83,11 @@ fn assert_published(
     expected_payload: &Bytes,
 ) {
     match frame {
-        Ok(Some(Frame::Publish {
+        Ok(Some(Frame::Publish(Publish {
             ident,
             channel,
             payload,
-        })) => {
+        }))) => {
             assert_eq!(ident, expected_ident);
             assert_eq!(channel, expected_channel);
             assert_eq!(payload, expected_payload);
@@ -114,27 +115,27 @@ async fn pub_sub() {
     let (addr, _notify) = start_server().await;
 
     let mut conn = start_client(addr).await;
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte string"),
-    })
+    }))
     .await
     .unwrap();
 
     let mut sub1 = start_client(addr).await;
-    sub1.write_frame(&Frame::Subscribe {
+    sub1.write_frame(&Frame::Subscribe(Subscribe {
         ident: "sub1".into(),
         channel: "bar".into(),
-    })
+    }))
     .await
     .unwrap();
 
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte strin2"),
-    })
+    }))
     .await
     .unwrap();
 
@@ -146,18 +147,18 @@ async fn pub_sub() {
     );
 
     let mut sub2 = start_client(addr).await;
-    sub2.write_frame(&Frame::Subscribe {
+    sub2.write_frame(&Frame::Subscribe(Subscribe {
         ident: "sub2".into(),
         channel: "bar".into(),
-    })
+    }))
     .await
     .unwrap();
 
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte strin3"),
-    })
+    }))
     .await
     .unwrap();
 
@@ -183,28 +184,28 @@ async fn nsubscribe() {
     let (addr, _notify) = start_server().await;
 
     let mut conn = start_client(addr).await;
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte string"),
-    })
+    }))
     .await
     .unwrap();
 
     // Start a subscriber
     let mut sub1 = start_client(addr).await;
-    sub1.write_frame(&Frame::Subscribe {
+    sub1.write_frame(&Frame::Subscribe(Subscribe {
         ident: "sub1".into(),
         channel: "bar".into(),
-    })
+    }))
     .await
     .unwrap();
 
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte strin2"),
-    })
+    }))
     .await
     .unwrap();
 
@@ -216,37 +217,37 @@ async fn nsubscribe() {
     );
 
     // Subscriber unsubscribes
-    sub1.write_frame(&Frame::Unsubscribe {
+    sub1.write_frame(&Frame::Unsubscribe(Unsubscribe {
         ident: "sub1".into(),
         channel: "bar".into(),
-    })
+    }))
     .await
     .unwrap();
 
     // Subscriber misses a publish
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte strin3"),
-    })
+    }))
     .await
     .unwrap();
 
     // Subscriber subscribes
     let mut sub1 = start_client(addr).await;
-    sub1.write_frame(&Frame::Subscribe {
+    sub1.write_frame(&Frame::Subscribe(Subscribe {
         ident: "sub1".into(),
         channel: "bar".into(),
-    })
+    }))
     .await
     .unwrap();
 
     // They should see this publish
-    conn.write_frame(&Frame::Publish {
+    conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
         payload: Bytes::from_static(b"this is a byte strin4"),
-    })
+    }))
     .await
     .unwrap();
 

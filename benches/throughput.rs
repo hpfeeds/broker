@@ -10,6 +10,7 @@ use std::{
 use tokio::{net::TcpStream, sync::watch::Sender};
 
 use hpfeeds_broker::{
+    frame::{Auth, Info, Publish, Subscribe},
     parse_endpoint,
     server::{self, Listener},
     sign, Connection, Db, Frame, User, UserSet, Users, Writer,
@@ -58,15 +59,15 @@ async fn start_client(addr: SocketAddr) -> Connection {
     let info = conn.read_frame().await.unwrap().unwrap();
 
     match info {
-        Frame::Info { broker_name, nonce } => {
+        Frame::Info(Info { broker_name, nonce }) => {
             assert_eq!(broker_name, "hpfeeds-broker");
 
             let signature = sign(nonce, "password");
 
-            conn.write_frame(&Frame::Auth {
+            conn.write_frame(&Frame::Auth(Auth {
                 ident: "bob".into(),
                 signature: Bytes::from_iter(signature),
-            })
+            }))
             .await
             .unwrap();
         }
@@ -92,20 +93,20 @@ fn single_subscriber(bench: &mut Bencher) {
 
         let mut s = start_client(server).await;
 
-        s.write_frame(&Frame::Subscribe {
+        s.write_frame(&Frame::Subscribe(Subscribe {
             ident: "foo".into(),
             channel: "bar".into(),
-        })
+        }))
         .await
         .unwrap();
 
         let mut p = start_client(server).await;
 
-        p.write_frame(&Frame::Publish {
+        p.write_frame(&Frame::Publish(Publish {
             ident: "foo".into(),
             channel: "bar".into(),
             payload: Bytes::from_static(b"hello world"),
-        })
+        }))
         .await
         .unwrap();
 
@@ -116,11 +117,11 @@ fn single_subscriber(bench: &mut Bencher) {
 
     bench.iter(|| {
         rt.block_on(async {
-            p.write_frame(&Frame::Publish {
+            p.write_frame(&Frame::Publish(Publish {
                 ident: "foo".into(),
                 channel: "bar".into(),
                 payload: Bytes::from_static(b"hello world"),
-            })
+            }))
             .await
             .unwrap();
 
@@ -138,10 +139,10 @@ fn twenty_subscribers(bench: &mut Bencher) {
         let mut subscribers = vec![];
         for _i in 1..20 {
             let mut s = start_client(server).await;
-            s.write_frame(&Frame::Subscribe {
+            s.write_frame(&Frame::Subscribe(Subscribe {
                 ident: "foo".into(),
                 channel: "bar".into(),
-            })
+            }))
             .await
             .unwrap();
             subscribers.push(s);
@@ -149,11 +150,11 @@ fn twenty_subscribers(bench: &mut Bencher) {
 
         let mut p = start_client(server).await;
 
-        p.write_frame(&Frame::Publish {
+        p.write_frame(&Frame::Publish(Publish {
             ident: "foo".into(),
             channel: "bar".into(),
             payload: Bytes::from_static(b"hello world"),
-        })
+        }))
         .await
         .unwrap();
 
@@ -162,11 +163,11 @@ fn twenty_subscribers(bench: &mut Bencher) {
 
     bench.iter(|| {
         rt.block_on(async {
-            p.write_frame(&Frame::Publish {
+            p.write_frame(&Frame::Publish(Publish {
                 ident: "foo".into(),
                 channel: "bar".into(),
                 payload: Bytes::from_static(b"hello world"),
-            })
+            }))
             .await
             .unwrap();
 

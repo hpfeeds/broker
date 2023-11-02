@@ -4,6 +4,7 @@
 //! spawning a task per connection.
 
 use crate::endpoint::ListenerClass;
+use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::IdentLabels;
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
@@ -403,10 +404,10 @@ impl Handler {
         rand::thread_rng().fill_bytes(&mut data);
 
         self.connection
-            .write_frame(&Frame::Info {
+            .write_frame(&Frame::Info(Info {
                 broker_name: "hpfeeds-broker".into(),
                 nonce: data,
-            })
+            }))
             .await?;
 
         // An individual client may subscribe to multiple channels and may
@@ -423,8 +424,9 @@ impl Handler {
             // signal.
             let maybe_frame = tokio::select! {
                 res = self.connection.read_frame() => res?,
-                Some((_, frame)) = subscriptions.next() => {
-                    self.connection.write_frame(&frame).await?;
+                Some((_, Publish {ident, channel, payload})) = subscriptions.next() => {
+                    self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
+                    self.db.metrics.publish_sent.get_or_create(&IdentChanLabels { ident: ident, chan: channel}).inc();
                     continue;
                 },
                 _ = self.shutdown.recv() => {
@@ -445,14 +447,16 @@ impl Handler {
             debug!(?frame);
 
             match frame {
-                Frame::Auth { ident, signature } => {
+                Frame::Auth(Auth { ident, signature }) => {
                     if self.user.is_none() {
                         if let Some(user) = self.users.get(&ident) {
                             let result = sign(data, &user.secret);
 
                             if !constant_time_eq(&result, &signature[..]) {
                                 self.connection
-                                    .write_frame(&Frame::Error("Authentication failed".into()))
+                                    .write_frame(&Frame::Error(Error {
+                                        message: "Authentication failed".into(),
+                                    }))
                                     .await?;
                                 return Ok(());
                             }
@@ -468,20 +472,22 @@ impl Handler {
                     }
 
                     self.connection
-                        .write_frame(&Frame::Error("Authentication failed".into()))
+                        .write_frame(&Frame::Error(Error {
+                            message: "Authentication failed".into(),
+                        }))
                         .await?;
                     return Ok(());
                 }
-                Frame::Publish {
+                Frame::Publish(Publish {
                     ident,
                     channel,
                     payload,
-                } => {
+                }) => {
                     if let Some(user) = &self.user {
                         if user.pubchans.contains(&channel) {
                             self.db.publish(
                                 &channel,
-                                Frame::Publish {
+                                Publish {
                                     ident: ident.clone(),
                                     channel: channel.clone(),
                                     payload,
@@ -500,14 +506,19 @@ impl Handler {
                     }
 
                     self.connection
-                        .write_frame(&Frame::Error("Publish not authorized".into()))
+                        .write_frame(&Frame::Error(Error {
+                            message: "Publish not authorized".into(),
+                        }))
                         .await?;
                     return Ok(());
                 }
-                Frame::Subscribe { ident: _, channel } => {
+                Frame::Subscribe(Subscribe { ident, channel }) => {
                     if let Some(user) = &self.user {
                         if user.subchans.contains(&channel) {
                             let mut rx = self.db.subscribe(channel.clone());
+
+                            let publish_lag = self.db.metrics.publish_lag.clone();
+                            let chan = channel.clone();
 
                             // Subscribe to the channel.
                             let rx = Box::pin(async_stream::stream! {
@@ -515,7 +526,9 @@ impl Handler {
                                     match rx.recv().await {
                                         Ok(msg) => yield msg,
                                         // If we lagged in consuming messages, just resume.
-                                        Err(broadcast::error::RecvError::Lagged(_)) => {}
+                                        Err(broadcast::error::RecvError::Lagged(amt)) => {
+                                            publish_lag.get_or_create(&IdentChanLabels { ident: ident.clone(), chan: chan.clone() }).inc_by(amt);
+                                        }
                                         Err(_) => break,
                                     }
                                 }
@@ -529,11 +542,13 @@ impl Handler {
                     }
 
                     self.connection
-                        .write_frame(&Frame::Error("Subscribe not authorized".into()))
+                        .write_frame(&Frame::Error(Error {
+                            message: "Subscribe not authorized".into(),
+                        }))
                         .await?;
                     return Ok(());
                 }
-                Frame::Unsubscribe { ident: _, channel } => {
+                Frame::Unsubscribe(Unsubscribe { ident: _, channel }) => {
                     subscriptions.remove(&channel);
                 }
                 _ => {

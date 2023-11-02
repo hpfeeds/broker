@@ -1,4 +1,4 @@
-use crate::frame::{self, Frame};
+use crate::frame::{self, Auth, Error, Frame, Info, Publish, Subscribe, Unsubscribe};
 use crate::Result;
 
 use bytes::{Buf, BytesMut};
@@ -137,7 +137,7 @@ impl Connection {
     /// enough data has been buffered yet, `Ok(None)` is returned. If the
     /// buffered data does not represent a valid frame, `Err` is returned.
     fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
-        use frame::Error::Incomplete;
+        use frame::FrameError::Incomplete;
 
         // Cursor is used to track the "current" location in the
         // buffer. Cursor also implements `Buf` from the `bytes` crate
@@ -204,14 +204,14 @@ impl Connection {
         // considered literals. For now, hpfeeds-broker is not able to encode
         // recursive frame structures. See below for more details.
         match frame {
-            Frame::Error(error) => {
-                let size = 5 + error.len();
+            Frame::Error(Error { message }) => {
+                let size = 5 + message.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(0).await?;
-                self.stream.write_u8(error.len() as u8).await?;
-                self.stream.write_all(error.as_bytes()).await?;
+                self.stream.write_u8(message.len() as u8).await?;
+                self.stream.write_all(message.as_bytes()).await?;
             }
-            Frame::Info { broker_name, nonce } => {
+            Frame::Info(Info { broker_name, nonce }) => {
                 let size = 6 + broker_name.len() + nonce.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(1).await?;
@@ -219,7 +219,7 @@ impl Connection {
                 self.stream.write_all(broker_name.as_bytes()).await?;
                 self.stream.write_all(nonce).await?;
             }
-            Frame::Auth { ident, signature } => {
+            Frame::Auth(Auth { ident, signature }) => {
                 let size = 6 + ident.len() + signature.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(2).await?;
@@ -227,11 +227,11 @@ impl Connection {
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(signature).await?;
             }
-            Frame::Publish {
+            Frame::Publish(Publish {
                 ident,
                 channel,
                 payload,
-            } => {
+            }) => {
                 let size = 7 + ident.len() + channel.len() + payload.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(3).await?;
@@ -241,7 +241,7 @@ impl Connection {
                 self.stream.write_all(channel.as_bytes()).await?;
                 self.stream.write_all(payload).await?;
             }
-            Frame::Subscribe { ident, channel } => {
+            Frame::Subscribe(Subscribe { ident, channel }) => {
                 let size = 6 + ident.len() + channel.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(4).await?;
@@ -249,7 +249,7 @@ impl Connection {
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(channel.as_bytes()).await?;
             }
-            Frame::Unsubscribe { ident, channel } => {
+            Frame::Unsubscribe(Unsubscribe { ident, channel }) => {
                 let size = 6 + ident.len() + channel.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(5).await?;
