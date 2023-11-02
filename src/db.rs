@@ -110,3 +110,9 @@ impl Db {
             .unwrap_or(0)
     }
 }
+
+impl Default for Db {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -22,31 +22,35 @@ impl Writer {
     }
 
     async fn write_u8(&mut self, n: u8) -> Result<()> {
-        Ok(match self {
+        match self {
             Writer::Tcp(stream) => stream.write_u8(n).await?,
             Writer::Tls(stream) => stream.write_u8(n).await?,
-        })
+        };
+        Ok(())
     }
 
     async fn write_u32(&mut self, n: u32) -> Result<()> {
-        Ok(match self {
+        match self {
             Writer::Tcp(stream) => stream.write_u32(n).await?,
             Writer::Tls(stream) => stream.write_u32(n).await?,
-        })
+        };
+        Ok(())
     }
 
     async fn write_all<'a>(&mut self, src: &'a [u8]) -> Result<()> {
-        Ok(match self {
+        match self {
             Writer::Tcp(stream) => stream.write_all(src).await?,
             Writer::Tls(stream) => stream.write_all(src).await?,
-        })
+        };
+        Ok(())
     }
 
     async fn flush<'a>(&mut self) -> Result<()> {
-        Ok(match self {
+        match self {
             Writer::Tcp(stream) => stream.flush().await?,
             Writer::Tls(stream) => stream.flush().await?,
-        })
+        };
+        Ok(())
     }
 }
 /// Send and receive `Frame` values from a remote peer.

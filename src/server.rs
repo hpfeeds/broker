@@ -182,7 +182,7 @@ fn load_certs(path: &str) -> std::io::Result<Vec<Certificate>> {
 }
 
 fn load_keys(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
     match keys.len() {
