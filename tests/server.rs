@@ -10,7 +10,7 @@ use tokio::{net::TcpStream, sync::watch::Sender};
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
-    sign, Connection, Db, Frame, User, UserSet, Users,
+    sign, Connection, Db, Frame, User, UserSet, Users, Writer,
 };
 
 async fn start_server() -> (SocketAddr, Sender<bool>) {
@@ -48,7 +48,9 @@ async fn start_server() -> (SocketAddr, Sender<bool>) {
 }
 
 async fn start_client(addr: SocketAddr) -> Connection {
-    let mut conn = Connection::new(TcpStream::connect(addr).await.unwrap());
+    let mut conn = Connection::new(Writer::new_with_tcp_stream(
+        TcpStream::connect(addr).await.unwrap(),
+    ));
 
     let info = conn.read_frame().await.unwrap().unwrap();
 
