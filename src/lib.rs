@@ -39,7 +39,7 @@ mod shutdown;
 use shutdown::Shutdown;
 
 mod prometheus;
-pub use prometheus::start_metrics_server;
+pub use prometheus::{start_metrics_server, IdentChanLabels};
 
 /// Default port that a redis server listens on.
 ///

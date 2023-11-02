@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use prometheus_client::registry::Registry;
 use std::{
     collections::{BTreeMap, BTreeSet},
     net::SocketAddr,
@@ -14,7 +15,8 @@ use hpfeeds_broker::{
 };
 
 async fn start_server() -> (SocketAddr, Sender<bool>) {
-    let db = Db::new();
+    let mut registry = <Registry>::with_prefix("hpfeeds_broker");
+    let db = Db::new(&mut registry);
 
     let mut subchans = BTreeSet::new();
     subchans.insert("bar".into());

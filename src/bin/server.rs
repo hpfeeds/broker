@@ -14,7 +14,10 @@ use hpfeeds_broker::{
     server::{self, Listener},
     start_metrics_server, Db, Endpoint,
 };
-use prometheus_client::{metrics::counter::Counter, registry::Registry};
+use prometheus_client::{
+    metrics::{counter::Counter, family::Family},
+    registry::Registry,
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::signal;
 
@@ -24,7 +27,8 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
 
     let cli = Cli::parse();
 
-    let db = Db::new();
+    let mut registry = <Registry>::with_prefix("hpfeeds_broker");
+    let db = Db::new(&mut registry);
 
     let mut users = hpfeeds_broker::Users::new();
     if let Some(paths) = cli.auth {
@@ -47,16 +51,6 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
         );
     }
     drop(notify_shutdown);
-
-    let request_counter: Counter<u64> = Default::default();
-
-    let mut registry = <Registry>::with_prefix("hpfeeds_broker");
-
-    registry.register(
-        "requests",
-        "How many requests the application has received",
-        request_counter.clone(),
-    );
 
     // Spawn a server to serve the OpenMetrics endpoint.
     let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8001);

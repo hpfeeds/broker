@@ -4,9 +4,12 @@
 //! spawning a task per connection.
 
 use crate::endpoint::ListenerClass;
-use crate::{auth, sign, Connection, Db, Endpoint, Frame, Shutdown, Writer};
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
 use constant_time_eq::constant_time_eq;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
+use prometheus_client::registry::Registry;
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
@@ -473,11 +476,19 @@ impl Handler {
                             self.db.publish(
                                 &channel,
                                 Frame::Publish {
-                                    ident,
+                                    ident: ident.clone(),
                                     channel: channel.clone(),
                                     payload,
                                 },
                             );
+                            self.db
+                                .metrics
+                                .receive_publish_count
+                                .get_or_create(&IdentChanLabels {
+                                    ident: ident,
+                                    chan: channel,
+                                })
+                                .inc();
                             continue;
                         }
                     }

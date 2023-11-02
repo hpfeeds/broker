@@ -1,7 +1,9 @@
+use prometheus_client::registry::Registry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
+use crate::prometheus::BrokerMetrics;
 use crate::Frame;
 
 /// Server state shared across all connections.
@@ -16,14 +18,14 @@ use crate::Frame;
 /// used to expire values after the requested duration has elapsed. The task
 /// runs until all instances of `Db` are dropped, at which point the task
 /// terminates.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Db {
     /// Handle to shared state. The background task will also have an
     /// `Arc<Shared>`.
     shared: Arc<Shared>,
+    pub metrics: BrokerMetrics,
 }
 
-#[derive(Debug)]
 struct Shared {
     /// The shared state is guarded by a mutex. This is a `std::sync::Mutex` and
     /// not a Tokio mutex. This is because there are no asynchronous operations
@@ -50,14 +52,17 @@ struct State {
 impl Db {
     /// Create a new, empty, `Db` instance. Allocates shared state and spawns a
     /// background task to manage key expiration.
-    pub fn new() -> Db {
+    pub fn new(registry: &mut Registry) -> Db {
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
                 pub_sub: HashMap::new(),
             }),
         });
 
-        Db { shared }
+        Db {
+            shared,
+            metrics: BrokerMetrics::new(registry),
+        }
     }
 
     /// Returns a `Receiver` for the requested channel.
@@ -108,11 +113,5 @@ impl Db {
             // If there is no entry for the channel key, then there are no
             // subscribers. In this case, return `0`.
             .unwrap_or(0)
-    }
-}
-
-impl Default for Db {
-    fn default() -> Self {
-        Self::new()
     }
 }

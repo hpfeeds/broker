@@ -2,9 +2,41 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use prometheus_client::{encoding::text::encode, registry::Registry};
+use prometheus_client::{
+    encoding::{text::encode, EncodeLabelSet},
+    metrics::{counter::Counter, family::Family},
+    registry::Registry,
+};
 use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::signal::unix::{signal, SignalKind};
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct IdentChanLabels {
+    // Use your own enum types to represent label values.
+    pub ident: String,
+    // Or just a plain string.
+    pub chan: String,
+}
+
+#[derive(Clone)]
+pub struct BrokerMetrics {
+    pub receive_publish_count: Family<IdentChanLabels, Counter>,
+}
+
+impl BrokerMetrics {
+    pub fn new(registry: &mut Registry) -> Self {
+        let receive_publish_count = Family::<IdentChanLabels, Counter>::default();
+        registry.register(
+            "receive_publish_count",
+            "Number of events received by broker for a channel",
+            receive_publish_count.clone(),
+        );
+
+        BrokerMetrics {
+            receive_publish_count,
+        }
+    }
+}
 
 /// Start a HTTP server to report metrics.
 pub async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
