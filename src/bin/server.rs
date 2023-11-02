@@ -11,18 +11,30 @@ use std::sync::Arc;
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
-    Db, Endpoint,
+    start_metrics_server, Db, Endpoint,
 };
 
 use clap::Parser;
 use tokio::signal;
 
+use hyper::{
+    service::{make_service_fn, service_fn},
+    Body, Request, Response, Server,
+};
 #[cfg(feature = "otel")]
 // To be able to set the XrayPropagator
 use opentelemetry::global;
 #[cfg(feature = "otel")]
 // To configure certain options such as sampling rate
 use opentelemetry::sdk::trace as sdktrace;
+use prometheus_client::{encoding::text::encode, metrics::counter::Counter, registry::Registry};
+use std::{
+    future::Future,
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    pin::Pin,
+};
+use tokio::signal::unix::{signal, SignalKind};
 #[cfg(feature = "otel")]
 // The `Ext` traits are to allow the Registry to accept the
 // OpenTelemetry-specific types (such as `OpenTelemetryLayer`)
@@ -59,6 +71,21 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
         );
     }
     drop(notify_shutdown);
+
+    let request_counter: Counter<u64> = Default::default();
+
+    let mut registry = <Registry>::with_prefix("hpfeeds_broker");
+
+    registry.register(
+        "requests",
+        "How many requests the application has received",
+        request_counter.clone(),
+    );
+
+    // Spawn a server to serve the OpenMetrics endpoint.
+    let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8001);
+
+    start_metrics_server(metrics_addr, registry).await;
 
     let handle = tokio::spawn(server::run(listeners));
 

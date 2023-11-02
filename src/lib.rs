@@ -38,6 +38,9 @@ pub mod server;
 mod shutdown;
 use shutdown::Shutdown;
 
+mod prometheus;
+pub use prometheus::start_metrics_server;
+
 /// Default port that a redis server listens on.
 ///
 /// Used if no port is specified.
