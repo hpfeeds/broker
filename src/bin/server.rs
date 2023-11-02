@@ -17,7 +17,6 @@ use hpfeeds_broker::{
 use clap::Parser;
 use tokio::signal;
 
-
 #[cfg(feature = "otel")]
 // To be able to set the XrayPropagator
 use opentelemetry::global;
@@ -25,9 +24,7 @@ use opentelemetry::global;
 // To configure certain options such as sampling rate
 use opentelemetry::sdk::trace as sdktrace;
 use prometheus_client::{metrics::counter::Counter, registry::Registry};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[cfg(feature = "otel")]
 // The `Ext` traits are to allow the Registry to accept the

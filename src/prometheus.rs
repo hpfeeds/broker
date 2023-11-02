@@ -3,13 +3,7 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use prometheus_client::{encoding::text::encode, registry::Registry};
-use std::{
-    future::Future,
-    io,
-    net::{SocketAddr},
-    pin::Pin,
-    sync::Arc,
-};
+use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::signal::unix::{signal, SignalKind};
 
 /// Start a HTTP server to report metrics.
