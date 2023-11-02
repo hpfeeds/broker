@@ -11,6 +11,12 @@ use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::signal::unix::{signal, SignalKind};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct IdentLabels {
+    // Use your own enum types to represent label values.
+    pub ident: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct IdentChanLabels {
     // Use your own enum types to represent label values.
     pub ident: String,
@@ -20,6 +26,9 @@ pub struct IdentChanLabels {
 
 #[derive(Clone)]
 pub struct BrokerMetrics {
+    pub connection_made: Counter,
+    pub connection_ready: Family<IdentLabels, Counter>,
+
     pub receive_publish_count: Family<IdentChanLabels, Counter>,
 }
 
@@ -32,7 +41,24 @@ impl BrokerMetrics {
             receive_publish_count.clone(),
         );
 
+        let connection_made = Counter::default();
+        registry.register(
+            "connection_made",
+            "Number of connections established",
+            connection_made.clone(),
+        );
+
+        let connection_ready = Family::<IdentLabels, Counter>::default();
+        registry.register(
+            "connection_ready",
+            "Number of connections established + authenticated",
+            connection_ready.clone(),
+        );
+
         BrokerMetrics {
+            connection_made,
+            connection_ready,
+
             receive_publish_count,
         }
     }

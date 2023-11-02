@@ -4,6 +4,7 @@
 //! spawning a task per connection.
 
 use crate::endpoint::ListenerClass;
+use crate::prometheus::IdentLabels;
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
 use constant_time_eq::constant_time_eq;
@@ -350,6 +351,8 @@ impl Listener {
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
                 Ok((socket, _)) => {
+                    self.db.metrics.connection_made.inc();
+
                     let sock = SockRef::from(&socket);
                     let ka = TcpKeepalive::new()
                         .with_time(std::time::Duration::from_secs(10))
@@ -457,6 +460,11 @@ impl Handler {
                             }
 
                             self.user = Some(user);
+                            self.db
+                                .metrics
+                                .connection_ready
+                                .get_or_create(&IdentLabels { ident })
+                                .inc();
                             continue;
                         }
                     }
