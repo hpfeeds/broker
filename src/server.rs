@@ -4,7 +4,7 @@
 //! spawning a task per connection.
 
 use crate::endpoint::ListenerClass;
-use crate::{auth, sign, Connection, Db, Endpoint, Frame, Shutdown};
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, Shutdown, Writer};
 
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
@@ -15,7 +15,6 @@ use std::io::{self, BufReader};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc, watch, Semaphore};
 use tokio::task::JoinSet;
 use tokio::time::{self, Duration};
@@ -81,7 +80,6 @@ pub struct Listener {
 
 /// Per-connection handler. Reads requests from `connection` and applies the
 /// commands to `db`.
-#[derive(Debug)]
 struct Handler {
     /// Shared database handle.
     ///
@@ -292,19 +290,12 @@ impl Listener {
             // error here is non-recoverable.
             let mut notify_shutdown = self.notify_shutdown.clone();
             let socket = tokio::select! {
-                res = self.accept() => res.unwrap(),
+                res = self.accept() => res?,
                 _ = notify_shutdown.changed() => {
                     // The shutdown signal has been received.
                     return Ok(self)
                 }
             };
-
-            let sock = SockRef::from(&socket);
-            let ka = TcpKeepalive::new()
-                .with_time(std::time::Duration::from_secs(10))
-                .with_interval(std::time::Duration::from_secs(5))
-                .with_retries(3);
-            sock.set_tcp_keepalive(&ka)?;
 
             // Create the necessary per-connection handler state.
             let mut handler = Handler {
@@ -316,7 +307,7 @@ impl Listener {
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
-                connection: Connection::new(socket),
+                connection: socket,
 
                 // Receive shutdown notifications.
                 shutdown: Shutdown::new(self.notify_shutdown.clone()),
@@ -347,7 +338,7 @@ impl Listener {
     /// After the second failure, the task waits for 2 seconds. Each subsequent
     /// failure doubles the wait time. If accepting fails on the 6th try after
     /// waiting for 64 seconds, then this function returns with an error.
-    async fn accept(&mut self) -> crate::Result<TcpStream> {
+    async fn accept(&mut self) -> crate::Result<Connection> {
         let mut backoff = 1;
 
         // Try to accept a few times
@@ -356,10 +347,21 @@ impl Listener {
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
                 Ok((socket, _)) => {
-                    return Ok(match self.acceptor {
-                        Some(acceptor) => acceptor.accept(socket).await?,
-                        None => socket,
-                    })
+                    let sock = SockRef::from(&socket);
+                    let ka = TcpKeepalive::new()
+                        .with_time(std::time::Duration::from_secs(10))
+                        .with_interval(std::time::Duration::from_secs(5))
+                        .with_retries(3);
+                    sock.set_tcp_keepalive(&ka)?;
+
+                    let writer = match &self.acceptor {
+                        Some(acceptor) => {
+                            Writer::new_with_tls_stream(acceptor.accept(socket).await.unwrap())
+                        }
+                        None => Writer::new_with_tcp_stream(socket),
+                    };
+
+                    return Ok(Connection::new(writer));
                 }
                 Err(err) => {
                     if backoff > 64 {

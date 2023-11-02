@@ -25,7 +25,7 @@ mod auth;
 pub use auth::{sign, User, UserSet, Users};
 
 mod connection;
-pub use connection::Connection;
+pub use connection::{Connection, Writer};
 
 pub mod frame;
 pub use frame::Frame;

@@ -1,10 +1,54 @@
 use crate::frame::{self, Frame};
+use crate::Result;
 
 use bytes::{Buf, BytesMut};
-use std::io::{self, Cursor};
+use std::io::Cursor;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use tokio_rustls::server::TlsStream;
 
+pub enum Writer {
+    Tcp(BufWriter<TcpStream>),
+    Tls(BufWriter<TlsStream<TcpStream>>),
+}
+
+impl Writer {
+    pub fn new_with_tcp_stream(stream: TcpStream) -> Self {
+        Self::Tcp(BufWriter::new(stream))
+    }
+
+    pub fn new_with_tls_stream(stream: TlsStream<TcpStream>) -> Self {
+        Self::Tls(BufWriter::new(stream))
+    }
+
+    async fn write_u8(&mut self, n: u8) -> Result<()> {
+        Ok(match self {
+            Writer::Tcp(stream) => stream.write_u8(n).await?,
+            Writer::Tls(stream) => stream.write_u8(n).await?,
+        })
+    }
+
+    async fn write_u32(&mut self, n: u32) -> Result<()> {
+        Ok(match self {
+            Writer::Tcp(stream) => stream.write_u32(n).await?,
+            Writer::Tls(stream) => stream.write_u32(n).await?,
+        })
+    }
+
+    async fn write_all<'a>(&mut self, src: &'a [u8]) -> Result<()> {
+        Ok(match self {
+            Writer::Tcp(stream) => stream.write_all(src).await?,
+            Writer::Tls(stream) => stream.write_all(src).await?,
+        })
+    }
+
+    async fn flush<'a>(&mut self) -> Result<()> {
+        Ok(match self {
+            Writer::Tcp(stream) => stream.flush().await?,
+            Writer::Tls(stream) => stream.flush().await?,
+        })
+    }
+}
 /// Send and receive `Frame` values from a remote peer.
 ///
 /// When implementing networking protocols, a message on that protocol is
@@ -17,12 +61,11 @@ use tokio::net::TcpStream;
 ///
 /// When sending frames, the frame is first encoded into the write buffer.
 /// The contents of the write buffer are then written to the socket.
-#[derive(Debug)]
 pub struct Connection {
     // The `TcpStream`. It is decorated with a `BufWriter`, which provides write
     // level buffering. The `BufWriter` implementation provided by Tokio is
     // sufficient for our needs.
-    stream: BufWriter<TcpStream>,
+    stream: Writer,
 
     // The buffer for reading frames.
     buffer: BytesMut,
@@ -31,9 +74,9 @@ pub struct Connection {
 impl Connection {
     /// Create a new `Connection`, backed by `socket`. Read and write buffers
     /// are initialized.
-    pub fn new(socket: TcpStream) -> Connection {
+    pub fn new(writer: Writer) -> Connection {
         Connection {
-            stream: BufWriter::new(socket),
+            stream: writer,
             // Default to a 4KB read buffer. For the use case of mini redis,
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
@@ -61,12 +104,17 @@ impl Connection {
                 return Ok(Some(frame));
             }
 
+            let bytes_read = match &mut self.stream {
+                Writer::Tcp(stream) => stream.read_buf(&mut self.buffer).await?,
+                Writer::Tls(stream) => stream.read_buf(&mut self.buffer).await?,
+            };
+
             // There is not enough buffered data to read a frame. Attempt to
             // read more data from the socket.
             //
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
-            if 0 == self.stream.read_buf(&mut self.buffer).await? {
+            if 0 == bytes_read {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
                 // there is, this means that the peer closed the socket while
@@ -147,7 +195,7 @@ impl Connection {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, hpfeeds-broker is not able to encode
         // recursive frame structures. See below for more details.
