@@ -4,7 +4,11 @@ use hyper::{
 };
 use prometheus_client::{
     encoding::{text::encode, EncodeLabelSet},
-    metrics::{counter::Counter, family::Family},
+    metrics::{
+        counter::Counter,
+        family::Family,
+        histogram::{exponential_buckets, Histogram},
+    },
     registry::{Registry, Unit},
 };
 use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
@@ -30,6 +34,7 @@ pub struct BrokerMetrics {
     pub connection_ready: Family<IdentLabels, Counter>,
     pub connection_lost: Counter,
 
+    pub publish_size: Family<IdentChanLabels, Histogram>,
     pub receive_publish_count: Family<IdentChanLabels, Counter>,
 
     pub publish_sent: Family<IdentChanLabels, Counter>,
@@ -38,6 +43,16 @@ pub struct BrokerMetrics {
 
 impl BrokerMetrics {
     pub fn new(registry: &mut Registry) -> Self {
+        let publish_size = Family::<IdentChanLabels, Histogram>::new_with_constructor(|| {
+            Histogram::new(exponential_buckets(1024.0, 2.0, 10))
+        });
+        registry.register_with_unit(
+            "publish_size",
+            "Size of events being published",
+            Unit::Bytes,
+            publish_size.clone(),
+        );
+
         let receive_publish_count = Family::<IdentChanLabels, Counter>::default();
         registry.register_with_unit(
             "publish_received",
@@ -91,6 +106,7 @@ impl BrokerMetrics {
             connection_ready,
             connection_lost,
 
+            publish_size,
             receive_publish_count,
 
             publish_lag,

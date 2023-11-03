@@ -490,6 +490,8 @@ impl Handler {
                 }) => {
                     if let Some(user) = &self.user {
                         if user.pubchans.contains(&channel) {
+                            let plen = payload.len() as f64;
+
                             self.db.publish(
                                 &channel,
                                 Publish {
@@ -498,6 +500,14 @@ impl Handler {
                                     payload,
                                 },
                             );
+                            self.db
+                                .metrics
+                                .publish_size
+                                .get_or_create(&IdentChanLabels {
+                                    ident: ident.clone(),
+                                    chan: channel.clone(),
+                                })
+                                .observe(plen);
                             self.db
                                 .metrics
                                 .receive_publish_count
