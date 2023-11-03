@@ -42,7 +42,7 @@ pub struct IdentChanErrorLabels {
     pub error: ErrorLabel,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BrokerMetrics {
     pub connection_made: Counter,
     pub connection_ready: Family<IdentLabels, Counter>,

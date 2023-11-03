@@ -1,3 +1,6 @@
+use prometheus_client::collector::Collector;
+use prometheus_client::metrics::gauge::ConstGauge;
+use prometheus_client::metrics::MetricType;
 use prometheus_client::registry::Registry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -18,7 +21,7 @@ use crate::prometheus::BrokerMetrics;
 /// used to expire values after the requested duration has elapsed. The task
 /// runs until all instances of `Db` are dropped, at which point the task
 /// terminates.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Db {
     /// Handle to shared state. The background task will also have an
     /// `Arc<Shared>`.
@@ -26,6 +29,7 @@ pub struct Db {
     pub metrics: BrokerMetrics,
 }
 
+#[derive(Debug)]
 struct Shared {
     /// The shared state is guarded by a mutex. This is a `std::sync::Mutex` and
     /// not a Tokio mutex. This is because there are no asynchronous operations
@@ -59,10 +63,14 @@ impl Db {
             }),
         });
 
-        Db {
+        let db = Db {
             shared,
             metrics: BrokerMetrics::new(registry),
-        }
+        };
+
+        registry.register_collector(Box::new(db.clone()));
+
+        db
     }
 
     /// Returns a `Receiver` for the requested channel.
@@ -113,5 +121,30 @@ impl Db {
             // If there is no entry for the channel key, then there are no
             // subscribers. In this case, return `0`.
             .unwrap_or(0)
+    }
+}
+
+use prometheus_client::encoding::EncodeMetric;
+
+impl Collector for Db {
+    fn encode(
+        &self,
+        mut encoder: prometheus_client::encoding::DescriptorEncoder,
+    ) -> Result<(), std::fmt::Error> {
+        let mut family = encoder.encode_descriptor(
+            "subscriptions",
+            "Total number of active subscriptions",
+            None,
+            MetricType::Gauge,
+        )?;
+
+        let state = self.shared.state.lock().unwrap();
+        for (topic, tx) in state.pub_sub.iter() {
+            let labels = [("chan", topic.as_str())];
+            let encoder = family.encode_family(&labels)?;
+            ConstGauge::new(tx.receiver_count() as i64).encode(encoder)?;
+        }
+
+        Ok(())
     }
 }
