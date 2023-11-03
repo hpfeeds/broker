@@ -12,11 +12,7 @@ use prometheus_client::{
     registry::{Registry, Unit},
 };
 use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
-use tokio::{
-    signal::unix::{signal, SignalKind},
-    sync::watch,
-    task::JoinHandle,
-};
+use tokio::{sync::watch, task::JoinHandle};
 use tracing::info;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
