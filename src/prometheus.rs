@@ -54,6 +54,7 @@ pub struct BrokerMetrics {
     pub receive_publish_count: Family<IdentChanLabels, Counter>,
 
     pub publish_sent: Family<IdentChanLabels, Counter>,
+    pub publish_sent_bytes: Family<IdentChanLabels, Counter>,
     pub publish_lag: Family<IdentChanLabels, Counter>,
 }
 
@@ -83,6 +84,14 @@ impl BrokerMetrics {
             "Number of events received by broker for a channel",
             Unit::Other("ev".to_string()),
             publish_sent.clone(),
+        );
+
+        let publish_sent_bytes = Family::<IdentChanLabels, Counter>::default();
+        registry.register_with_unit(
+            "publish_sent",
+            "Number of events received by broker for a channel",
+            Unit::Bytes,
+            publish_sent_bytes.clone(),
         );
 
         let publish_lag = Family::<IdentChanLabels, Counter>::default();
@@ -136,6 +145,7 @@ impl BrokerMetrics {
 
             publish_lag,
             publish_sent,
+            publish_sent_bytes,
         }
     }
 }

@@ -411,8 +411,10 @@ impl Handler {
             let maybe_frame = tokio::select! {
                 res = self.connection.read_frame() => res?,
                 Some((_, Publish {ident, channel, payload})) = subscriptions.next() => {
-                    self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
-                    self.db.metrics.publish_sent.get_or_create(&IdentChanLabels { ident, chan: channel}).inc();
+                    let written = self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
+                    let labels = IdentChanLabels { ident, chan: channel };
+                    self.db.metrics.publish_sent.get_or_create(&labels).inc();
+                    self.db.metrics.publish_sent_bytes.get_or_create(&labels).inc_by(written as u64);
                     continue;
                 },
                 _ = self.shutdown.recv() => {
