@@ -1,35 +1,21 @@
-
-
-
-
-
-
+use std::sync::Arc;
 
 use prometheus_client::collector::Collector;
 use prometheus_client::encoding::EncodeMetric;
 use prometheus_client::metrics::gauge::ConstGauge;
 use prometheus_client::metrics::MetricType;
+use tokio::sync::Semaphore;
 
-
-
-
-
-
-use std::sync::Arc;
-
-use tokio::sync::{Semaphore};
-
-
-
-
-
-
-
+/// Maximum number of concurrent connections the redis server will accept.
+///
+/// When this limit is reached, the server will stop accepting connections until
+/// an active connection terminates.
+///
 const MAX_CONNECTIONS: usize = 4000;
 
 #[derive(Debug, Clone)]
 pub struct ConnectionLimits {
-    limit_connections: Arc<Semaphore>,
+    pub limit_connections: Arc<Semaphore>,
 }
 
 impl Default for ConnectionLimits {

@@ -28,7 +28,7 @@ pub struct Db {
     /// `Arc<Shared>`.
     shared: Arc<Shared>,
     pub metrics: BrokerMetrics,
-    connection_limits: ConnectionLimits,
+    pub limit_connections: ConnectionLimits,
 }
 
 #[derive(Debug)]
@@ -68,10 +68,10 @@ impl Db {
         let db = Db {
             shared,
             metrics: BrokerMetrics::new(registry),
-            connection_limits: ConnectionLimits::default(),
+            limit_connections: ConnectionLimits::default(),
         };
 
-        registry.register_collector(Box::new(db.connection_limits.clone()));
+        registry.register_collector(Box::new(db.limit_connections.clone()));
         registry.register_collector(Box::new(db.clone()));
 
         db

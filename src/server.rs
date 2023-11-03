@@ -10,10 +10,6 @@ use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdo
 
 use constant_time_eq::constant_time_eq;
 
-
-
-
-
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
@@ -22,7 +18,7 @@ use std::io::{self, BufReader};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, mpsc, watch, Semaphore};
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinSet;
 use tokio::time::{self, Duration};
 use tokio_rustls::TlsAcceptor;
@@ -46,16 +42,6 @@ pub struct Listener {
     listener: TcpListener,
 
     acceptor: Option<TlsAcceptor>,
-
-    /// Limit the max number of connections.
-    ///
-    /// A `Semaphore` is used to limit the max number of connections. Before
-    /// attempting to accept a new connection, a permit is acquired from the
-    /// semaphore. If none are available, the listener waits for one.
-    ///
-    /// When handlers complete processing a connection, the permit is returned
-    /// to the semaphore.
-    limit_connections: Arc<Semaphore>,
 
     /// Broadcasts a shutdown signal to all active connections.
     ///
@@ -121,16 +107,6 @@ struct Handler {
     /// Not used directly. Instead, when `Handler` is dropped...?
     _shutdown_complete: mpsc::Sender<()>,
 }
-
-/// Maximum number of concurrent connections the redis server will accept.
-///
-/// When this limit is reached, the server will stop accepting connections until
-/// an active connection terminates.
-///
-/// A real application will want to make this value configurable, but for this
-/// example, it is hard coded.
-///
-const MAX_CONNECTIONS: usize = 4000;
 
 /// Run the broker.
 ///
@@ -247,7 +223,6 @@ impl Listener {
             listener,
             acceptor,
             db,
-            limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             notify_shutdown: notify_shutdown.clone(),
             shutdown_complete_tx,
             shutdown_complete_rx,
@@ -286,6 +261,8 @@ impl Listener {
             // `acquire_owned()` returns `Err` when the semaphore has been
             // closed. We don't ever close the semaphore, so `unwrap()` is safe.
             let permit = self
+                .db
+                .limit_connections
                 .limit_connections
                 .clone()
                 .acquire_owned()
