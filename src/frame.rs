@@ -1,12 +1,11 @@
 //! Provides a type representing a Redis protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
+use anyhow::{bail, Result};
 use bytes::{Buf, Bytes};
 use std::convert::TryInto;
 use std::fmt;
 use std::io::Cursor;
-use std::num::TryFromIntError;
-use std::string::FromUtf8Error;
 
 #[derive(Clone, Debug)]
 pub struct Error {
@@ -59,9 +58,6 @@ pub enum Frame {
 pub enum FrameError {
     /// Not enough data is available to parse a message
     Incomplete,
-
-    /// Invalid message encoding
-    Other(crate::Error),
 }
 
 impl Frame {
@@ -77,7 +73,7 @@ impl Frame {
     }
 
     /// The message has already been validated with `check`.
-    pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, FrameError> {
+    pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame> {
         let pos = src.position();
         let size = src.get_u32();
 
@@ -135,7 +131,7 @@ impl Frame {
 
                 Ok(Frame::Unsubscribe(Unsubscribe { ident, channel }))
             }
-            _ => Err("protocol error; invalid opcode".into()),
+            _ => bail!("protocol error; invalid opcode"),
         }
     }
 }
@@ -183,37 +179,12 @@ fn get_remaining<'a>(
     Ok(&src.get_ref()[cur_pos..cur_pos + left])
 }
 
-impl From<String> for FrameError {
-    fn from(src: String) -> FrameError {
-        FrameError::Other(src.into())
-    }
-}
-
-impl From<&str> for FrameError {
-    fn from(src: &str) -> FrameError {
-        src.to_string().into()
-    }
-}
-
-impl From<FromUtf8Error> for FrameError {
-    fn from(_src: FromUtf8Error) -> FrameError {
-        "protocol error; invalid frame format".into()
-    }
-}
-
-impl From<TryFromIntError> for FrameError {
-    fn from(_src: TryFromIntError) -> FrameError {
-        "protocol error; invalid frame format".into()
-    }
-}
-
 impl std::error::Error for FrameError {}
 
 impl fmt::Display for FrameError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FrameError::Incomplete => "stream ended early".fmt(fmt),
-            FrameError::Other(err) => err.fmt(fmt),
         }
     }
 }
