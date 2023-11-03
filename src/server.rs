@@ -83,6 +83,7 @@ struct Handler {
 
     users: Arc<auth::Users>,
 
+    ident: Option<String>,
     user: Option<auth::User>,
 
     /// The TCP connection decorated with the redis protocol encoder / decoder
@@ -288,6 +289,7 @@ impl Listener {
 
                 users: self.users.clone(),
                 user: None,
+                ident: None,
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
@@ -412,7 +414,7 @@ impl Handler {
                 res = self.connection.read_frame() => res?,
                 Some((_, Publish {ident, channel, payload})) = subscriptions.next() => {
                     let written = self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
-                    let labels = IdentChanLabels { ident, chan: channel };
+                    let labels = IdentChanLabels { ident: self.ident.clone().unwrap(), chan: channel };
                     self.db.metrics.publish_sent.get_or_create(&labels).inc();
                     self.db.metrics.publish_sent_bytes.get_or_create(&labels).inc_by(written as u64);
                     continue;
@@ -459,6 +461,8 @@ impl Handler {
                             }
 
                             self.user = Some(user);
+                            self.ident = Some(ident.clone());
+
                             self.db
                                 .metrics
                                 .connection_ready
