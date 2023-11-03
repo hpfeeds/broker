@@ -24,7 +24,7 @@ use tokio::time::{self, Duration};
 use tokio_rustls::TlsAcceptor;
 use tokio_stream::StreamExt;
 use tokio_stream::StreamMap;
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
