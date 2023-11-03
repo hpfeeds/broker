@@ -161,10 +161,7 @@ pub async fn start_metrics_server(
             }))
             .with_graceful_shutdown(async move {
                 // RecvErr means notify_shutdown has gone away so can ignore
-                match notify_shutdown.changed().await {
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
+                let _ = notify_shutdown.changed().await;
             }),
     )
 }
