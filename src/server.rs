@@ -10,10 +10,10 @@ use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdo
 
 use constant_time_eq::constant_time_eq;
 
-use prometheus_client::collector::Collector;
-use prometheus_client::encoding::EncodeMetric;
-use prometheus_client::metrics::MetricType;
-use prometheus_client::metrics::gauge::ConstGauge;
+
+
+
+
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
@@ -29,38 +29,6 @@ use tokio_rustls::TlsAcceptor;
 use tokio_stream::StreamExt;
 use tokio_stream::StreamMap;
 use tracing::{error, info, instrument};
-
-#[derive(Debug, Clone)]
-pub struct ConnectionLimits {
-    limit_connections: Arc<Semaphore>,
-}
-
-impl Collector for ConnectionLimits {
-    fn encode(&self, mut encoder: prometheus_client::encoding::DescriptorEncoder) -> Result<(), std::fmt::Error> {
-        let available_permits = self.limit_connections.available_permits() as i64;
-        let max_connections = MAX_CONNECTIONS as i64;
-
-        let gauge = ConstGauge::new(max_connections - available_permits);
-        let metric_encoder = encoder.encode_descriptor(
-            "client_connections_used",
-            "The number of clients current connected",
-            None,
-            MetricType::Gauge,
-        )?;
-        gauge.encode(metric_encoder)?;
-    
-        let gauge = ConstGauge::new(available_permits);
-        let metric_encoder = encoder.encode_descriptor(
-            "client_connections_available",
-            "The number of clients that can connect before the server is full",
-            None,
-            MetricType::Gauge,
-        )?;
-        gauge.encode(metric_encoder)?;
-
-        Ok(())
-    }
-}
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.

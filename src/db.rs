@@ -8,6 +8,7 @@ use tokio::sync::broadcast;
 
 use crate::frame::Publish;
 use crate::prometheus::BrokerMetrics;
+use crate::ConnectionLimits;
 
 /// Server state shared across all connections.
 ///
@@ -27,6 +28,7 @@ pub struct Db {
     /// `Arc<Shared>`.
     shared: Arc<Shared>,
     pub metrics: BrokerMetrics,
+    connection_limits: ConnectionLimits,
 }
 
 #[derive(Debug)]
@@ -66,8 +68,10 @@ impl Db {
         let db = Db {
             shared,
             metrics: BrokerMetrics::new(registry),
+            connection_limits: ConnectionLimits::default(),
         };
 
+        registry.register_collector(Box::new(db.connection_limits.clone()));
         registry.register_collector(Box::new(db.clone()));
 
         db

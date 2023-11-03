@@ -41,6 +41,9 @@ use shutdown::Shutdown;
 mod prometheus;
 pub use prometheus::{start_metrics_server, IdentChanLabels};
 
+mod connection_limits;
+pub use connection_limits::ConnectionLimits;
+
 /// Error returned by most functions.
 ///
 /// When writing a real application, one might want to consider a specialized
