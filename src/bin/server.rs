@@ -8,15 +8,14 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use hpfeeds_broker::{
     parse_endpoint,
     server::{self, Listener},
-    start_metrics_server, Db, Endpoint,
+    start_metrics_server, Db, Endpoint, ListenerClass,
 };
 use prometheus_client::registry::Registry;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::signal;
 
 #[tokio::main]
@@ -24,6 +23,14 @@ pub async fn main() -> Result<()> {
     set_up_logging()?;
 
     let cli = Cli::parse();
+
+    if cli.tlscert.is_some() && cli.tlskey.is_none() {
+        bail!("--tlscert is set but --tlskey is not");
+    }
+
+    if cli.tlskey.is_some() && cli.tlscert.is_none() {
+        bail!("--tlskey is set but --tlscert is not");
+    }
 
     let mut registry = <Registry>::with_prefix("hpfeeds_broker");
     let db = Db::new(&mut registry);
@@ -36,10 +43,38 @@ pub async fn main() -> Result<()> {
     }
     let users = Arc::new(users);
 
-    let endpoints = match cli.endpoint {
+    let mut endpoints = match cli.endpoint {
         Some(endpoints) => endpoints,
-        None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000")?],
+        None => vec![],
     };
+
+    if cli.bind.is_some() || endpoints.len() == 0 {
+        let bind = match cli.bind {
+            Some(bind) => bind,
+            None => "0.0.0.0:20000".to_string(),
+        };
+        let (address, port) = bind.split_once(":").context("bind is incorrect")?;
+
+        if let (Some(tlscert), Some(tlskey)) = (cli.tlscert, cli.tlskey) {
+            endpoints.push(Endpoint {
+                listener_class: ListenerClass::Tls {
+                    certificate: tlscert,
+                    private_key: tlskey,
+                    chain: None,
+                },
+                interface: address.to_string(),
+                port: port.parse()?,
+                device: None,
+            })
+        } else {
+            endpoints.push(Endpoint {
+                listener_class: ListenerClass::Tcp,
+                interface: address.to_string(),
+                port: port.parse()?,
+                device: None,
+            })
+        }
+    }
 
     let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
     let mut listeners = vec![];
@@ -49,10 +84,18 @@ pub async fn main() -> Result<()> {
         );
     }
 
-    // Spawn a server to serve the OpenMetrics endpoint.
-    let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8001);
-    let metrics_handle =
-        start_metrics_server(metrics_addr, registry, notify_shutdown.clone()).await;
+    let metrics_handle = match cli.exporter {
+        Some(exporter) => {
+            // Spawn a server to serve the OpenMetrics endpoint.
+            let metrics_addr = exporter.parse()?;
+            let metrics_handle =
+                start_metrics_server(metrics_addr, registry, notify_shutdown.clone()).await;
+
+            Some(metrics_handle)
+        }
+        None => None,
+    };
+
     drop(notify_shutdown);
 
     let handle = tokio::spawn(server::run(listeners));
@@ -62,7 +105,10 @@ pub async fn main() -> Result<()> {
     drop(notify_shutdown_tx);
 
     handle.await?;
-    metrics_handle.await??;
+
+    if let Some(metrics_handle) = metrics_handle {
+        metrics_handle.await??;
+    }
 
     Ok(())
 }
@@ -77,8 +123,28 @@ pub async fn main() -> Result<()> {
 struct Cli {
     #[clap(long)]
     auth: Option<Vec<String>>,
-    #[arg(long, value_parser = parse_endpoint)]
+
+    #[arg(short, long, value_parser = parse_endpoint)]
     endpoint: Option<Vec<Endpoint>>,
+
+    #[clap(long, default_value = "hpfeeds-broker")]
+    name: String,
+
+    #[clap(long)]
+    exporter: Option<String>,
+
+    #[clap(long)]
+    bind: Option<String>,
+
+    #[clap(long)]
+    tlscert: Option<String>,
+
+    #[clap(long)]
+    tlskey: Option<String>,
+
+    // No-op for compatibility with legacy broker cli
+    #[clap(long, default_value_t = false)]
+    debug: bool,
 }
 
 fn set_up_logging() -> Result<()> {
