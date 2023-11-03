@@ -53,6 +53,7 @@ impl Writer {
         Ok(())
     }
 }
+
 /// Send and receive `Frame` values from a remote peer.
 ///
 /// When implementing networking protocols, a message on that protocol is

@@ -3,7 +3,7 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use prometheus_client::{
-    encoding::{text::encode, EncodeLabelSet},
+    encoding::{text::encode, EncodeLabelSet, EncodeLabelValue},
     metrics::{
         counter::Counter,
         family::Family,
@@ -28,10 +28,25 @@ pub struct IdentChanLabels {
     pub chan: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
+pub enum ErrorLabel {
+    SignatureInvalid,
+    IdentInvalid,
+    PublishNotAuthorized,
+    SubscribeNotAuthorized,
+}
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct IdentChanErrorLabels {
+    pub ident: Option<String>,
+    pub chan: Option<String>,
+    pub error: ErrorLabel,
+}
+
 #[derive(Clone)]
 pub struct BrokerMetrics {
     pub connection_made: Counter,
     pub connection_ready: Family<IdentLabels, Counter>,
+    pub connection_error: Family<IdentChanErrorLabels, Counter>,
     pub connection_lost: Counter,
 
     pub publish_size: Family<IdentChanLabels, Histogram>,
@@ -93,6 +108,14 @@ impl BrokerMetrics {
             connection_ready.clone(),
         );
 
+        let connection_error = Family::<IdentChanErrorLabels, Counter>::default();
+        registry.register_with_unit(
+            "connection_error",
+            "Number of connection errors",
+            Unit::Other("con".to_string()),
+            connection_error.clone(),
+        );
+
         let connection_lost = Counter::default();
         registry.register_with_unit(
             "connection_lost",
@@ -104,6 +127,7 @@ impl BrokerMetrics {
         BrokerMetrics {
             connection_made,
             connection_ready,
+            connection_error,
             connection_lost,
 
             publish_size,

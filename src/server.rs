@@ -5,7 +5,7 @@
 
 use crate::endpoint::ListenerClass;
 use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
-use crate::prometheus::IdentLabels;
+use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
 use constant_time_eq::constant_time_eq;
@@ -463,6 +463,17 @@ impl Handler {
                                         message: "Authentication failed".into(),
                                     }))
                                     .await?;
+
+                                self.db
+                                    .metrics
+                                    .connection_error
+                                    .get_or_create(&IdentChanErrorLabels {
+                                        ident: Some(ident),
+                                        chan: None,
+                                        error: crate::prometheus::ErrorLabel::SignatureInvalid,
+                                    })
+                                    .inc();
+
                                 return Ok(());
                             }
 
@@ -475,6 +486,16 @@ impl Handler {
                             continue;
                         }
                     }
+
+                    self.db
+                        .metrics
+                        .connection_error
+                        .get_or_create(&IdentChanErrorLabels {
+                            ident: Some(ident),
+                            chan: None,
+                            error: crate::prometheus::ErrorLabel::IdentInvalid,
+                        })
+                        .inc();
 
                     self.connection
                         .write_frame(&Frame::Error(Error {
@@ -520,6 +541,16 @@ impl Handler {
                         }
                     }
 
+                    self.db
+                        .metrics
+                        .connection_error
+                        .get_or_create(&IdentChanErrorLabels {
+                            ident: Some(ident),
+                            chan: None,
+                            error: crate::prometheus::ErrorLabel::PublishNotAuthorized,
+                        })
+                        .inc();
+
                     self.connection
                         .write_frame(&Frame::Error(Error {
                             message: "Publish not authorized".into(),
@@ -555,6 +586,16 @@ impl Handler {
                             continue;
                         }
                     }
+
+                    self.db
+                        .metrics
+                        .connection_error
+                        .get_or_create(&IdentChanErrorLabels {
+                            ident: Some(ident),
+                            chan: None,
+                            error: crate::prometheus::ErrorLabel::SubscribeNotAuthorized,
+                        })
+                        .inc();
 
                     self.connection
                         .write_frame(&Frame::Error(Error {
