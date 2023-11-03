@@ -497,6 +497,7 @@ impl Handler {
                     if let Some(user) = &self.user {
                         if user.pubchans.contains(&channel) {
                             let plen = payload.len() as f64;
+                            let size = (7 + ident.len() + channel.len() + payload.len()) as u64;
 
                             self.db.publish(
                                 &channel,
@@ -506,22 +507,27 @@ impl Handler {
                                     payload,
                                 },
                             );
+
+                            let labels = IdentChanLabels {
+                                ident,
+                                chan: channel,
+                            };
                             self.db
                                 .metrics
                                 .publish_size
-                                .get_or_create(&IdentChanLabels {
-                                    ident: ident.clone(),
-                                    chan: channel.clone(),
-                                })
+                                .get_or_create(&labels)
                                 .observe(plen);
                             self.db
                                 .metrics
                                 .receive_publish_count
-                                .get_or_create(&IdentChanLabels {
-                                    ident,
-                                    chan: channel,
-                                })
+                                .get_or_create(&labels)
                                 .inc();
+                            self.db
+                                .metrics
+                                .receive_publish_size
+                                .get_or_create(&labels)
+                                .inc_by(size);
+
                             continue;
                         }
                     }
