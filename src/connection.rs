@@ -200,17 +200,19 @@ impl Connection {
     /// syscalls. However, it is fine to call these functions on a *buffered*
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
-    pub async fn write_frame(&mut self, frame: &Frame) -> Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> Result<usize> {
         // Arrays are encoded by encoding each entry. All other frame types are
         // considered literals. For now, hpfeeds-broker is not able to encode
         // recursive frame structures. See below for more details.
-        match frame {
+        let written = match frame {
             Frame::Error(Error { message }) => {
                 let size = 5 + message.len();
                 self.stream.write_u32(size as u32).await?;
                 self.stream.write_u8(0).await?;
                 self.stream.write_u8(message.len() as u8).await?;
                 self.stream.write_all(message.as_bytes()).await?;
+
+                size
             }
             Frame::Info(Info { broker_name, nonce }) => {
                 let size = 6 + broker_name.len() + nonce.len();
@@ -219,6 +221,8 @@ impl Connection {
                 self.stream.write_u8(broker_name.len() as u8).await?;
                 self.stream.write_all(broker_name.as_bytes()).await?;
                 self.stream.write_all(nonce).await?;
+
+                size
             }
             Frame::Auth(Auth { ident, signature }) => {
                 let size = 6 + ident.len() + signature.len();
@@ -227,6 +231,8 @@ impl Connection {
                 self.stream.write_u8(ident.len() as u8).await?;
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(signature).await?;
+
+                size
             }
             Frame::Publish(Publish {
                 ident,
@@ -241,6 +247,8 @@ impl Connection {
                 self.stream.write_u8(channel.len() as u8).await?;
                 self.stream.write_all(channel.as_bytes()).await?;
                 self.stream.write_all(payload).await?;
+
+                size
             }
             Frame::Subscribe(Subscribe { ident, channel }) => {
                 let size = 6 + ident.len() + channel.len();
@@ -249,6 +257,8 @@ impl Connection {
                 self.stream.write_u8(ident.len() as u8).await?;
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(channel.as_bytes()).await?;
+
+                size
             }
             Frame::Unsubscribe(Unsubscribe { ident, channel }) => {
                 let size = 6 + ident.len() + channel.len();
@@ -257,12 +267,16 @@ impl Connection {
                 self.stream.write_u8(ident.len() as u8).await?;
                 self.stream.write_all(ident.as_bytes()).await?;
                 self.stream.write_all(channel.as_bytes()).await?;
+
+                size
             }
-        }
+        };
 
         // Ensure the encoded frame is written to the socket. The calls above
         // are to the buffered stream and writes. Calling `flush` writes the
         // remaining contents of the buffer to the socket.
-        self.stream.flush().await
+        self.stream.flush().await?;
+
+        Ok(written)
     }
 }
