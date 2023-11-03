@@ -45,3 +45,9 @@ anyhow = "1.0.75"
 # Enable test-utilities in dev mode only. This is mostly for tests.
 tokio = { version = "1", features = ["test-util"] }
 bencher = "0.1.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+debug = true
+opt-level = 3
