@@ -12,7 +12,12 @@ use prometheus_client::{
     registry::{Registry, Unit},
 };
 use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::{
+    signal::unix::{signal, SignalKind},
+    sync::watch,
+    task::JoinHandle,
+};
+use tracing::info;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct IdentLabels {
@@ -140,25 +145,32 @@ impl BrokerMetrics {
 }
 
 /// Start a HTTP server to report metrics.
-pub async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
-
-    eprintln!("Starting metrics server on {metrics_addr}");
+pub async fn start_metrics_server(
+    metrics_addr: SocketAddr,
+    registry: Registry,
+    mut notify_shutdown: watch::Receiver<bool>,
+) -> JoinHandle<Result<(), hyper::Error>> {
+    info!("Starting metrics server on {metrics_addr}");
 
     let registry = Arc::new(registry);
-    Server::bind(&metrics_addr)
-        .serve(make_service_fn(move |_conn| {
-            let registry = registry.clone();
-            async move {
-                let handler = make_handler(registry);
-                Ok::<_, io::Error>(service_fn(handler))
-            }
-        }))
-        .with_graceful_shutdown(async move {
-            shutdown_stream.recv().await;
-        })
-        .await
-        .unwrap();
+
+    tokio::spawn(
+        Server::bind(&metrics_addr)
+            .serve(make_service_fn(move |_conn| {
+                let registry = registry.clone();
+                async move {
+                    let handler = make_handler(registry);
+                    Ok::<_, io::Error>(service_fn(handler))
+                }
+            }))
+            .with_graceful_shutdown(async move {
+                // RecvErr means notify_shutdown has gone away so can ignore
+                match notify_shutdown.changed().await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+            }),
+    )
 }
 
 /// This function returns a HTTP handler (i.e. another function)

@@ -36,7 +36,7 @@ impl Collector for ConnectionLimits {
 
         let gauge = ConstGauge::new(max_connections - available_permits);
         let metric_encoder = encoder.encode_descriptor(
-            "client_connections_used",
+            "connections_permits_used",
             "The number of clients current connected",
             None,
             MetricType::Gauge,
@@ -45,7 +45,7 @@ impl Collector for ConnectionLimits {
 
         let gauge = ConstGauge::new(available_permits);
         let metric_encoder = encoder.encode_descriptor(
-            "client_connections_available",
+            "connection_permits_available",
             "The number of clients that can connect before the server is full",
             None,
             MetricType::Gauge,

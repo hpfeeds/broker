@@ -47,12 +47,12 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
             Listener::new(endpoint, db.clone(), users.clone(), notify_shutdown.clone()).await,
         );
     }
-    drop(notify_shutdown);
 
     // Spawn a server to serve the OpenMetrics endpoint.
     let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8001);
-
-    start_metrics_server(metrics_addr, registry).await;
+    let metrics_handle =
+        start_metrics_server(metrics_addr, registry, notify_shutdown.clone()).await;
+    drop(notify_shutdown);
 
     let handle = tokio::spawn(server::run(listeners));
 
@@ -61,6 +61,7 @@ pub async fn main() -> hpfeeds_broker::Result<()> {
     drop(notify_shutdown_tx);
 
     handle.await?;
+    metrics_handle.await??;
 
     Ok(())
 }
