@@ -8,7 +8,7 @@ use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
@@ -252,21 +252,13 @@ impl Listener {
 
         loop {
             // Wait for a permit to become available
-            //
-            // `acquire_owned` returns a permit that is bound to the semaphore.
-            // When the permit value is dropped, it is automatically returned
-            // to the semaphore.
-            //
-            // `acquire_owned()` returns `Err` when the semaphore has been
-            // closed. We don't ever close the semaphore, so `unwrap()` is safe.
             let permit = self
                 .db
                 .limit_connections
                 .limit_connections
                 .clone()
                 .acquire_owned()
-                .await
-                .unwrap();
+                .await?;
 
             // Accept a new socket. This will attempt to perform error handling.
             // The `accept` method internally attempts to recover errors, so an
@@ -347,7 +339,7 @@ impl Listener {
 
                     let writer = match &self.acceptor {
                         Some(acceptor) => {
-                            Writer::new_with_tls_stream(acceptor.accept(socket).await.unwrap())
+                            Writer::new_with_tls_stream(acceptor.accept(socket).await?)
                         }
                         None => Writer::new_with_tcp_stream(socket),
                     };
@@ -412,7 +404,7 @@ impl Handler {
                 res = self.connection.read_frame() => res?,
                 Some((_, Publish {ident, channel, payload})) = subscriptions.next() => {
                     let written = self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
-                    let labels = IdentChanLabels { ident: self.ident.clone().unwrap(), chan: channel };
+                    let labels = IdentChanLabels { ident: self.ident.clone().context("Received pub before auth")?, chan: channel };
                     self.db.metrics.publish_sent.get_or_create(&labels).inc();
                     self.db.metrics.publish_sent_bytes.get_or_create(&labels).inc_by(written as u64);
                     continue;
