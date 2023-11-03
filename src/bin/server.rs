@@ -38,7 +38,7 @@ pub async fn main() -> Result<()> {
 
     let endpoints = match cli.endpoint {
         Some(endpoints) => endpoints,
-        None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000").unwrap()],
+        None => vec![parse_endpoint("tcp:interface=127.0.0.1:port=10000")?],
     };
 
     let (notify_shutdown_tx, notify_shutdown) = tokio::sync::watch::channel(false);
