@@ -9,6 +9,7 @@ RUN cargo build --target x86_64-unknown-linux-musl --release
 
 FROM scratch
 STOPSIGNAL SIGINT
-COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/hpfeeds-broker /hpfeeds-broker
+RUN mkdir -p /app/bin
+COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/hpfeeds-broker /app/bin/hpfeeds-broker
 USER 5000
-CMD ["/hpfeeds-broker"]
+CMD ["/app/bin/hpfeeds-broker", "--endpoint=tcp:port=20000", "--exporter=0.0.0.0:9431"]
