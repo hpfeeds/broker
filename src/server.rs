@@ -449,8 +449,6 @@ impl Handler {
                 None => return Ok(()),
             };
 
-            debug!(?frame);
-
             match frame {
                 Frame::Auth(Auth { ident, signature }) => {
                     if self.user.is_none() {
