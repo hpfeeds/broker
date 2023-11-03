@@ -43,7 +43,9 @@ async fn start_server() -> (SocketAddr, Sender<bool>) {
     let (notify_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 
     let endpoint = parse_endpoint("tcp:interface=127.0.0.1:port=0").unwrap();
-    let listener = Listener::new(endpoint, db, Arc::new(users), notify_shutdown).await;
+    let listener = Listener::new(endpoint, db, Arc::new(users), notify_shutdown)
+        .await
+        .unwrap();
     let addr = listener.local_addr();
 
     tokio::spawn(async move { server::run(vec![listener]).await });

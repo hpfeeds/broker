@@ -158,21 +158,21 @@ pub async fn run(listeners: Vec<Listener>) {
     }
 }
 
-fn load_certs(path: &str) -> std::io::Result<Vec<Certificate>> {
+fn load_certs(path: &str) -> Result<Vec<Certificate>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader)?;
     Ok(certs.into_iter().map(Certificate).collect())
 }
 
-fn load_keys(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
+fn load_keys(path: &str) -> Result<PrivateKey> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
     match keys.len() {
-        0 => Err(format!("No PKCS8-encoded private key found in {path}").into()),
+        0 => bail!("No PKCS8-encoded private key found in {path}"),
         1 => Ok(PrivateKey(keys.remove(0))),
-        _ => Err(format!("More than one PKCS8-encoded private key found in {path}").into()),
+        _ => bail!("More than one PKCS8-encoded private key found in {path}"),
     }
 }
 
@@ -182,22 +182,21 @@ impl Listener {
         db: Db,
         users: Arc<crate::Users>,
         notify_shutdown: watch::Receiver<bool>,
-    ) -> Self {
+    ) -> Result<Self> {
         let acceptor = match endpoint.listener_class {
             ListenerClass::Tls {
                 private_key,
                 certificate,
                 chain: _,
             } => {
-                let certs = load_certs(&certificate).unwrap();
-                let key = load_keys(&private_key).unwrap();
+                let certs = load_certs(&certificate)?;
+                let key = load_keys(&private_key)?;
 
                 let config = rustls::ServerConfig::builder()
                     .with_safe_defaults()
                     .with_no_client_auth()
                     .with_single_cert(certs, key)
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))
-                    .unwrap();
+                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
 
                 let acceptor = TlsAcceptor::from(Arc::new(config));
 
@@ -207,9 +206,8 @@ impl Listener {
         };
 
         // Bind a TCP listener
-        let listener = TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port))
-            .await
-            .unwrap();
+        let listener =
+            TcpListener::bind(&format!("{}:{}", endpoint.interface, endpoint.port)).await?;
 
         // When the provided `shutdown` future completes, we must send a shutdown
         // message to all active connections. We use a broadcast channel for this
@@ -219,7 +217,7 @@ impl Listener {
         let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
 
         // Initialize the listener state
-        Listener {
+        Ok(Listener {
             users: users.clone(),
             listener,
             acceptor,
@@ -227,7 +225,7 @@ impl Listener {
             notify_shutdown: notify_shutdown.clone(),
             shutdown_complete_tx,
             shutdown_complete_rx,
-        }
+        })
     }
 
     pub fn local_addr(&self) -> SocketAddr {

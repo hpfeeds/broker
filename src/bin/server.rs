@@ -45,7 +45,7 @@ pub async fn main() -> Result<()> {
     let mut listeners = vec![];
     for endpoint in endpoints {
         listeners.push(
-            Listener::new(endpoint, db.clone(), users.clone(), notify_shutdown.clone()).await,
+            Listener::new(endpoint, db.clone(), users.clone(), notify_shutdown.clone()).await?,
         );
     }
 
