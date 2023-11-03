@@ -5,7 +5,7 @@ use hyper::{
 use prometheus_client::{
     encoding::{text::encode, EncodeLabelSet},
     metrics::{counter::Counter, family::Family},
-    registry::Registry,
+    registry::{Registry, Unit},
 };
 use std::{future::Future, io, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::signal::unix::{signal, SignalKind};
@@ -39,44 +39,50 @@ pub struct BrokerMetrics {
 impl BrokerMetrics {
     pub fn new(registry: &mut Registry) -> Self {
         let receive_publish_count = Family::<IdentChanLabels, Counter>::default();
-        registry.register(
+        registry.register_with_unit(
             "publish_received",
             "Number of events received by broker for a channel",
+            Unit::Other("ev".to_string()),
             receive_publish_count.clone(),
         );
 
         let publish_sent = Family::<IdentChanLabels, Counter>::default();
-        registry.register(
+        registry.register_with_unit(
             "publish_sent",
             "Number of events received by broker for a channel",
+            Unit::Other("ev".to_string()),
             publish_sent.clone(),
         );
 
         let publish_lag = Family::<IdentChanLabels, Counter>::default();
-        registry.register(
+        registry.register_with_unit(
             "publish_lag",
             "Number of events dropped because of backpressure",
+            Unit::Other("ev".to_string()),
             publish_lag.clone(),
         );
 
         let connection_made = Counter::default();
-        registry.register(
+        registry.register_with_unit(
             "connection_made",
             "Number of connections established",
+            Unit::Other("con".to_string()),
             connection_made.clone(),
         );
 
         let connection_ready = Family::<IdentLabels, Counter>::default();
-        registry.register(
+        registry.register_with_unit(
             "connection_ready",
             "Number of connections established + authenticated",
+            Unit::Other("con".to_string()),
             connection_ready.clone(),
         );
 
         let connection_lost = Counter::default();
-        registry.register(
+        registry.register_with_unit(
             "connection_lost",
             "Number of connections lost",
+            Unit::Other("con".to_string()),
             connection_lost.clone(),
         );
 
