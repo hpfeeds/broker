@@ -1,4 +1,4 @@
-use crate::Result;
+use anyhow::Result;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use std::collections::{BTreeMap, BTreeSet};

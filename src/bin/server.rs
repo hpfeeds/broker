@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 
+use anyhow::Result;
 use clap::Parser;
 use hpfeeds_broker::{
     parse_endpoint,
@@ -19,7 +20,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::signal;
 
 #[tokio::main]
-pub async fn main() -> hpfeeds_broker::Result<()> {
+pub async fn main() -> Result<()> {
     set_up_logging()?;
 
     let cli = Cli::parse();
@@ -80,7 +81,7 @@ struct Cli {
     endpoint: Option<Vec<Endpoint>>,
 }
 
-fn set_up_logging() -> hpfeeds_broker::Result<()> {
+fn set_up_logging() -> Result<()> {
     // See https://docs.rs/tracing for more info
-    tracing_subscriber::fmt::try_init()
+    Ok(tracing_subscriber::fmt::init())
 }

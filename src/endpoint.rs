@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::Result;
+use anyhow::Result;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ListenerClass {

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use bytes::Bytes;
 use prometheus_client::registry::Registry;
 use std::{
@@ -77,7 +78,7 @@ async fn start_client(addr: SocketAddr) -> Connection {
 }
 
 fn assert_published(
-    frame: &hpfeeds_broker::Result<Option<Frame>>,
+    frame: &Result<Option<Frame>>,
     expected_ident: &str,
     expected_channel: &str,
     expected_payload: &Bytes,

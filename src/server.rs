@@ -8,8 +8,8 @@ use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
 use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
 
+use anyhow::{bail, Result};
 use constant_time_eq::constant_time_eq;
-
 use rand::RngCore;
 use rustls::{Certificate, PrivateKey};
 use socket2::{SockRef, TcpKeepalive};
@@ -249,7 +249,7 @@ impl Listener {
     /// The process is not able to detect when a transient error resolves
     /// itself. One strategy for handling this is to implement a back off
     /// strategy, which is what we do here.
-    async fn run(mut self) -> crate::Result<Self> {
+    async fn run(mut self) -> Result<Self> {
         info!("accepting inbound connections");
 
         loop {
@@ -329,7 +329,7 @@ impl Listener {
     /// After the second failure, the task waits for 2 seconds. Each subsequent
     /// failure doubles the wait time. If accepting fails on the 6th try after
     /// waiting for 64 seconds, then this function returns with an error.
-    async fn accept(&mut self) -> crate::Result<Connection> {
+    async fn accept(&mut self) -> Result<Connection> {
         let mut backoff = 1;
 
         // Try to accept a few times
@@ -387,7 +387,7 @@ impl Handler {
     /// When the shutdown signal is received, the connection is processed until
     /// it reaches a safe state, at which point it is terminated.
     #[instrument(skip(self))]
-    async fn run(&mut self) -> crate::Result<()> {
+    async fn run(&mut self) -> Result<()> {
         let mut data = [0u8; 4];
         rand::thread_rng().fill_bytes(&mut data);
 
@@ -599,7 +599,7 @@ impl Handler {
                     subscriptions.remove(&channel);
                 }
                 _ => {
-                    return Err("protocol err; unexpected action".into());
+                    bail!("protocol err; unexpected action");
                 }
             };
         }
