@@ -72,10 +72,9 @@ impl BrokerMetrics {
         );
 
         let receive_publish_count = Family::<IdentChanLabels, Counter>::default();
-        registry.register_with_unit(
+        registry.register(
             "publish_received",
             "Number of events received by broker for a channel",
-            Unit::Other("ev".to_string()),
             receive_publish_count.clone(),
         );
 
@@ -88,10 +87,9 @@ impl BrokerMetrics {
         );
 
         let publish_sent = Family::<IdentChanLabels, Counter>::default();
-        registry.register_with_unit(
+        registry.register(
             "publish_sent",
             "Number of events received by broker for a channel",
-            Unit::Other("ev".to_string()),
             publish_sent.clone(),
         );
 
@@ -104,42 +102,37 @@ impl BrokerMetrics {
         );
 
         let publish_lag = Family::<IdentChanLabels, Counter>::default();
-        registry.register_with_unit(
+        registry.register(
             "publish_lag",
             "Number of events dropped because of backpressure",
-            Unit::Other("ev".to_string()),
             publish_lag.clone(),
         );
 
         let connection_made = Counter::default();
-        registry.register_with_unit(
-            "connection_made",
+        registry.register(
+            "session_started",
             "Number of connections established",
-            Unit::Other("con".to_string()),
             connection_made.clone(),
         );
 
         let connection_ready = Family::<IdentLabels, Counter>::default();
-        registry.register_with_unit(
-            "connection_ready",
+        registry.register(
+            "session_ready",
             "Number of connections established + authenticated",
-            Unit::Other("con".to_string()),
             connection_ready.clone(),
         );
 
         let connection_error = Family::<IdentChanErrorLabels, Counter>::default();
-        registry.register_with_unit(
-            "connection_error",
+        registry.register(
+            "session_error",
             "Number of connection errors",
-            Unit::Other("con".to_string()),
             connection_error.clone(),
         );
 
         let connection_lost = Counter::default();
-        registry.register_with_unit(
-            "connection_lost",
+        registry.register(
+            "session_ended",
             "Number of connections lost",
-            Unit::Other("con".to_string()),
             connection_lost.clone(),
         );
 
