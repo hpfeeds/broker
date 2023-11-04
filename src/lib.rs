@@ -25,7 +25,7 @@ mod auth;
 pub use auth::{sign, User, UserSet, Users};
 
 mod connection;
-pub use connection::{Connection, Writer};
+pub use connection::Connection;
 
 pub mod frame;
 pub use frame::Frame;
@@ -43,3 +43,6 @@ pub use prometheus::{start_metrics_server, IdentChanLabels};
 
 mod connection_limits;
 pub use connection_limits::ConnectionLimits;
+
+mod stream;
+pub use stream::MultiStream;

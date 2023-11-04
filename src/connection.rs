@@ -1,58 +1,10 @@
 use crate::frame::{self, Auth, Error, Frame, Info, Publish, Subscribe, Unsubscribe};
+use crate::stream::MultiStream;
 
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::TcpStream;
-use tokio_rustls::server::TlsStream;
-
-pub enum Writer {
-    Tcp(BufWriter<TcpStream>),
-    Tls(BufWriter<TlsStream<TcpStream>>),
-}
-
-impl Writer {
-    pub fn new_with_tcp_stream(stream: TcpStream) -> Self {
-        Self::Tcp(BufWriter::new(stream))
-    }
-
-    pub fn new_with_tls_stream(stream: TlsStream<TcpStream>) -> Self {
-        Self::Tls(BufWriter::new(stream))
-    }
-
-    async fn write_u8(&mut self, n: u8) -> Result<()> {
-        match self {
-            Writer::Tcp(stream) => stream.write_u8(n).await?,
-            Writer::Tls(stream) => stream.write_u8(n).await?,
-        };
-        Ok(())
-    }
-
-    async fn write_u32(&mut self, n: u32) -> Result<()> {
-        match self {
-            Writer::Tcp(stream) => stream.write_u32(n).await?,
-            Writer::Tls(stream) => stream.write_u32(n).await?,
-        };
-        Ok(())
-    }
-
-    async fn write_all<'a>(&mut self, src: &'a [u8]) -> Result<()> {
-        match self {
-            Writer::Tcp(stream) => stream.write_all(src).await?,
-            Writer::Tls(stream) => stream.write_all(src).await?,
-        };
-        Ok(())
-    }
-
-    async fn flush<'a>(&mut self) -> Result<()> {
-        match self {
-            Writer::Tcp(stream) => stream.flush().await?,
-            Writer::Tls(stream) => stream.flush().await?,
-        };
-        Ok(())
-    }
-}
 
 /// Send and receive `Frame` values from a remote peer.
 ///
@@ -70,7 +22,7 @@ pub struct Connection {
     // The `TcpStream`. It is decorated with a `BufWriter`, which provides write
     // level buffering. The `BufWriter` implementation provided by Tokio is
     // sufficient for our needs.
-    stream: Writer,
+    stream: BufWriter<MultiStream>,
 
     // The buffer for reading frames.
     buffer: BytesMut,
@@ -79,9 +31,9 @@ pub struct Connection {
 impl Connection {
     /// Create a new `Connection`, backed by `socket`. Read and write buffers
     /// are initialized.
-    pub fn new(writer: Writer) -> Connection {
+    pub fn new(writer: MultiStream) -> Connection {
         Connection {
-            stream: writer,
+            stream: BufWriter::new(writer),
             // Default to a 4KB read buffer. For the use case of mini redis,
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
@@ -109,10 +61,7 @@ impl Connection {
                 return Ok(Some(frame));
             }
 
-            let bytes_read = match &mut self.stream {
-                Writer::Tcp(stream) => stream.read_buf(&mut self.buffer).await?,
-                Writer::Tls(stream) => stream.read_buf(&mut self.buffer).await?,
-            };
+            let bytes_read = self.stream.read_buf(&mut self.buffer).await?;
 
             // There is not enough buffered data to read a frame. Attempt to
             // read more data from the socket.

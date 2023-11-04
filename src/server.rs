@@ -6,7 +6,8 @@
 use crate::endpoint::ListenerClass;
 use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
-use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Writer};
+use crate::stream::MultiStream;
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown};
 
 use anyhow::{bail, Context, Result};
 use constant_time_eq::constant_time_eq;
@@ -338,10 +339,8 @@ impl Listener {
                     sock.set_tcp_keepalive(&ka)?;
 
                     let writer = match &self.acceptor {
-                        Some(acceptor) => {
-                            Writer::new_with_tls_stream(acceptor.accept(socket).await?)
-                        }
-                        None => Writer::new_with_tcp_stream(socket),
+                        Some(acceptor) => MultiStream::Tls(acceptor.accept(socket).await?),
+                        None => MultiStream::Tcp(socket),
                     };
 
                     return Ok(Connection::new(writer));
