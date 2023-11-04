@@ -314,6 +314,67 @@ impl Listener {
     }
 
     /// Accept an inbound connection.
+    async fn accept_once(&mut self) -> Result<Connection> {
+        let (socket, _addr) = match self.listener.accept().await {
+            Ok(res) => res,
+            Err(e) => {
+                self.db
+                    .metrics
+                    .connection_error
+                    .get_or_create(&IdentChanErrorLabels {
+                        ident: None,
+                        chan: None,
+                        error: crate::prometheus::ErrorLabel::SocketAcceptFailure,
+                    })
+                    .inc();
+                return Err(e.into());
+            }
+        };
+
+        self.db.metrics.connection_made.inc();
+
+        let sock = SockRef::from(&socket);
+        let ka = TcpKeepalive::new()
+            .with_time(std::time::Duration::from_secs(10))
+            .with_interval(std::time::Duration::from_secs(5))
+            .with_retries(3);
+
+        if let Err(e) = sock.set_tcp_keepalive(&ka) {
+            self.db
+                .metrics
+                .connection_error
+                .get_or_create(&IdentChanErrorLabels {
+                    ident: None,
+                    chan: None,
+                    error: crate::prometheus::ErrorLabel::SocketConfigurationFailure,
+                })
+                .inc();
+            return Err(e.into());
+        }
+
+        let writer = match &self.acceptor {
+            Some(acceptor) => match acceptor.accept(socket).await {
+                Ok(socket) => MultiStream::Tls(socket),
+                Err(e) => {
+                    self.db
+                        .metrics
+                        .connection_error
+                        .get_or_create(&IdentChanErrorLabels {
+                            ident: None,
+                            chan: None,
+                            error: crate::prometheus::ErrorLabel::TlsFailure,
+                        })
+                        .inc();
+                    return Err(e.into());
+                }
+            },
+            None => MultiStream::Tcp(socket),
+        };
+
+        return Ok(Connection::new(writer));
+    }
+
+    /// Accept an inbound connection.
     ///
     /// Errors are handled by backing off and retrying. An exponential backoff
     /// strategy is used. After the first failure, the task waits for 1 second.
@@ -325,25 +386,9 @@ impl Listener {
 
         // Try to accept a few times
         loop {
-            // Perform the accept operation. If a socket is successfully
-            // accepted, return it. Otherwise, save the error.
-            match self.listener.accept().await {
-                Ok((socket, _)) => {
-                    self.db.metrics.connection_made.inc();
-
-                    let sock = SockRef::from(&socket);
-                    let ka = TcpKeepalive::new()
-                        .with_time(std::time::Duration::from_secs(10))
-                        .with_interval(std::time::Duration::from_secs(5))
-                        .with_retries(3);
-                    sock.set_tcp_keepalive(&ka)?;
-
-                    let writer = match &self.acceptor {
-                        Some(acceptor) => MultiStream::Tls(acceptor.accept(socket).await?),
-                        None => MultiStream::Tcp(socket),
-                    };
-
-                    return Ok(Connection::new(writer));
+            match self.accept_once().await {
+                Ok(connection) => {
+                    return Ok(connection);
                 }
                 Err(err) => {
                     if backoff > 64 {
@@ -351,7 +396,7 @@ impl Listener {
                         return Err(err.into());
                     }
                 }
-            }
+            };
 
             // Pause execution until the back off period elapses.
             time::sleep(Duration::from_secs(backoff)).await;

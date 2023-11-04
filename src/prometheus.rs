@@ -31,6 +31,9 @@ pub struct IdentChanLabels {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
 pub enum ErrorLabel {
+    SocketAcceptFailure,
+    SocketConfigurationFailure,
+    TlsFailure,
     SignatureInvalid,
     IdentInvalid,
     PublishNotAuthorized,
