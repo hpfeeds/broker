@@ -38,7 +38,7 @@ async fn start_server() -> (SocketAddr, Sender<bool>) {
     );
 
     let mut users = Users::new();
-    users.user_sets.push(UserSet { users: records });
+    users.user_sets.push(UserSet::Static(records));
 
     let (notify_tx, notify_shutdown) = tokio::sync::watch::channel(false);
 

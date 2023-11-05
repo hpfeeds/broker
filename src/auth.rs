@@ -1,7 +1,11 @@
 use anyhow::Result;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct User {
@@ -12,8 +16,21 @@ pub struct User {
 }
 
 #[derive(Debug)]
-pub struct UserSet {
-    pub users: BTreeMap<String, User>,
+pub enum UserSet {
+    Static(BTreeMap<String, User>),
+    Json {
+        users: BTreeMap<String, User>,
+        watcher: RecommendedWatcher,
+    },
+}
+
+impl UserSet {
+    pub fn get_user(&self, user: &str) -> Option<User> {
+        match self {
+            Self::Static(users) => users.get(user).cloned(),
+            Self::Json { users, .. } => users.get(user).cloned(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -68,22 +85,30 @@ impl Users {
         }
 
         Users {
-            user_sets: vec![UserSet { users }],
+            user_sets: vec![UserSet::Static(users)],
         }
     }
 
     pub fn add_user_set(&mut self, path: String) -> Result<()> {
-        let users_string = std::fs::read_to_string(path)?;
+        let users_string = std::fs::read_to_string(&path)?;
         let users: BTreeMap<String, User> = serde_json::from_str(&users_string)?;
 
-        self.user_sets.push(UserSet { users });
+        // Automatically select the best implementation for your platform.
+        let mut watcher = notify::recommended_watcher(|res| match res {
+            Ok(event) => println!("event: {:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+        })?;
+
+        watcher.watch(Path::new(&path), RecursiveMode::Recursive)?;
+
+        self.user_sets.push(UserSet::Json { users, watcher });
 
         Ok(())
     }
 
     pub fn get(&self, username: &String) -> Option<User> {
         for set in &self.user_sets {
-            if let Some(user) = set.users.get(username) {
+            if let Some(user) = set.get_user(username) {
                 return Some(user.clone());
             }
         }
