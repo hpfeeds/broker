@@ -371,7 +371,7 @@ impl Listener {
             None => MultiStream::Tcp(socket),
         };
 
-        return Ok(Connection::new(writer));
+        Ok(Connection::new(writer))
     }
 
     /// Accept an inbound connection.
@@ -393,7 +393,7 @@ impl Listener {
                 Err(err) => {
                     if backoff > 64 {
                         // Accept has failed too many times. Return the error.
-                        return Err(err.into());
+                        return Err(err);
                     }
                 }
             };

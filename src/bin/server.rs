@@ -48,12 +48,12 @@ pub async fn main() -> Result<()> {
         None => vec![],
     };
 
-    if cli.bind.is_some() || endpoints.len() == 0 {
+    if cli.bind.is_some() || endpoints.is_empty() {
         let bind = match cli.bind {
             Some(bind) => bind,
             None => "0.0.0.0:20000".to_string(),
         };
-        let (address, port) = bind.split_once(":").context("bind is incorrect")?;
+        let (address, port) = bind.split_once(':').context("bind is incorrect")?;
 
         if let (Some(tlscert), Some(tlskey)) = (cli.tlscert, cli.tlskey) {
             endpoints.push(Endpoint {
@@ -149,5 +149,6 @@ struct Cli {
 
 fn set_up_logging() -> Result<()> {
     // See https://docs.rs/tracing for more info
-    Ok(tracing_subscriber::fmt::init())
+    tracing_subscriber::fmt::init();
+    Ok(())
 }
