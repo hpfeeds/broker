@@ -7,7 +7,7 @@ use crate::endpoint::ListenerClass;
 use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
 use crate::stream::MultiStream;
-use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown};
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Resolver};
 
 use anyhow::{bail, Context, Result};
 use constant_time_eq::constant_time_eq;
@@ -159,24 +159,6 @@ pub async fn run(listeners: Vec<Listener>) {
     }
 }
 
-fn load_certs(path: &str) -> Result<Vec<Certificate>> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let certs = rustls_pemfile::certs(&mut reader)?;
-    Ok(certs.into_iter().map(Certificate).collect())
-}
-
-fn load_keys(path: &str) -> Result<PrivateKey> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
-    match keys.len() {
-        0 => bail!("No PKCS8-encoded private key found in {path}"),
-        1 => Ok(PrivateKey(keys.remove(0))),
-        _ => bail!("More than one PKCS8-encoded private key found in {path}"),
-    }
-}
-
 impl Listener {
     pub async fn new(
         endpoint: Endpoint,
@@ -188,16 +170,13 @@ impl Listener {
             ListenerClass::Tls {
                 private_key,
                 certificate,
-                chain: _,
+                chain,
             } => {
-                let certs = load_certs(&certificate)?;
-                let key = load_keys(&private_key)?;
-
+                let cert_resolver = Resolver::new(private_key, certificate, chain)?;
                 let config = rustls::ServerConfig::builder()
                     .with_safe_defaults()
                     .with_no_client_auth()
-                    .with_single_cert(certs, key)
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+                    .with_cert_resolver(Arc::new(cert_resolver));
 
                 let acceptor = TlsAcceptor::from(Arc::new(config));
 

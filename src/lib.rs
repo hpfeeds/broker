@@ -46,3 +46,6 @@ pub use connection_limits::ConnectionLimits;
 
 mod stream;
 pub use stream::MultiStream;
+
+mod certificates;
+pub use certificates::Resolver;
