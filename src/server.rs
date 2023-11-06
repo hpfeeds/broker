@@ -12,10 +12,10 @@ use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Resolv
 use anyhow::{bail, Context, Result};
 use constant_time_eq::constant_time_eq;
 use rand::RngCore;
-use rustls::{Certificate, PrivateKey};
+
 use socket2::{SockRef, TcpKeepalive};
-use std::fs::File;
-use std::io::{self, BufReader};
+
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
