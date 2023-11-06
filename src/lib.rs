@@ -18,6 +18,13 @@
 //!   intermediate representation between a "command" and the byte
 //!   representation.
 
+/// The size in bytes of the write buffer
+pub const TUNING_WRITE_BUFFER: usize = 16384;
+
+/// The number of events we can wait to write to the network. After we have this
+/// many held in the queue we start to drop old events (lag).
+pub const TUNING_CHANNEL_BACKPRESSURE: usize = 8192;
+
 mod endpoint;
 pub use endpoint::{parse_endpoint, Endpoint, ListenerClass};
 

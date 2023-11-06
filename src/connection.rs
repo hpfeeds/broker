@@ -1,5 +1,6 @@
 use crate::frame::{self, Auth, Error, Frame, Info, Publish, Subscribe, Unsubscribe};
 use crate::stream::MultiStream;
+use crate::TUNING_WRITE_BUFFER;
 
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
@@ -38,7 +39,7 @@ impl Connection {
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
             // a larger read buffer will work better.
-            buffer: BytesMut::with_capacity(16 * 1024),
+            buffer: BytesMut::with_capacity(TUNING_WRITE_BUFFER),
         }
     }
 
