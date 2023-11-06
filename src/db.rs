@@ -103,7 +103,7 @@ impl Db {
                 // When the channel's capacity fills up, publishing will result
                 // in old messages being dropped. This prevents slow consumers
                 // from blocking the entire system.
-                let (tx, rx) = broadcast::channel(1024);
+                let (tx, rx) = broadcast::channel(16384);
                 e.insert(tx);
                 rx
             }
