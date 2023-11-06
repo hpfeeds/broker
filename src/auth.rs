@@ -57,7 +57,7 @@ impl UserSet {
 
             let len = new_users.len();
 
-            users.swap(Arc::new(new_users));
+            users.store(Arc::new(new_users));
 
             info!("Reloaded user data: {path}. Found {} records.", len);
         })?;

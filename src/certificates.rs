@@ -62,7 +62,7 @@ impl Resolver {
                 }
             };
 
-            watched_certified_key.swap(Arc::new(key));
+            watched_certified_key.store(Arc::new(key));
 
             info!("Certificate reloaded");
         })?;
