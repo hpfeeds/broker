@@ -17,7 +17,7 @@ use socket2::{SockRef, TcpKeepalive};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinSet;
 use tokio::time::{self, Duration};
@@ -85,15 +85,7 @@ struct Handler {
 
     ident: Option<String>,
     user: Option<auth::User>,
-
-    /// The TCP connection decorated with the redis protocol encoder / decoder
-    /// implemented using a buffered `TcpStream`.
-    ///
-    /// When `Listener` receives an inbound connection, the `TcpStream` is
-    /// passed to `Connection::new`, which initializes the associated buffers.
-    /// `Connection` allows the handler to operate at the "frame" level and keep
-    /// the byte level protocol parsing details encapsulated in `Connection`.
-    connection: Connection,
+    acceptor: Option<TlsAcceptor>,
 
     /// Listen for shutdown notifications.
     ///
@@ -262,7 +254,7 @@ impl Listener {
 
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
-                connection: socket,
+                acceptor: self.acceptor.clone(),
 
                 // Receive shutdown notifications.
                 shutdown: Shutdown::new(self.notify_shutdown.clone()),
@@ -278,7 +270,7 @@ impl Listener {
             // asynchronous green threads and are executed concurrently.
             tokio::spawn(async move {
                 // Process the connection. If an error is encountered, log it.
-                if let Err(err) = handler.run().await {
+                if let Err(err) = handler.run(socket).await {
                     error!(cause = ?err, "connection error");
                 }
 
@@ -292,7 +284,7 @@ impl Listener {
     }
 
     /// Accept an inbound connection.
-    async fn accept_once(&mut self) -> Result<Connection> {
+    async fn accept_once(&mut self) -> Result<TcpStream> {
         let (socket, _addr) = match self.listener.accept().await {
             Ok(res) => res,
             Err(e) => {
@@ -311,45 +303,7 @@ impl Listener {
 
         self.db.metrics.connection_made.inc();
 
-        let sock = SockRef::from(&socket);
-        let ka = TcpKeepalive::new()
-            .with_time(std::time::Duration::from_secs(10))
-            .with_interval(std::time::Duration::from_secs(5))
-            .with_retries(3);
-
-        if let Err(e) = sock.set_tcp_keepalive(&ka) {
-            self.db
-                .metrics
-                .connection_error
-                .get_or_create(&IdentChanErrorLabels {
-                    ident: None,
-                    chan: None,
-                    error: crate::prometheus::ErrorLabel::SocketConfigurationFailure,
-                })
-                .inc();
-            return Err(e.into());
-        }
-
-        let writer = match &self.acceptor {
-            Some(acceptor) => match acceptor.accept(socket).await {
-                Ok(socket) => MultiStream::Tls(socket),
-                Err(e) => {
-                    self.db
-                        .metrics
-                        .connection_error
-                        .get_or_create(&IdentChanErrorLabels {
-                            ident: None,
-                            chan: None,
-                            error: crate::prometheus::ErrorLabel::TlsFailure,
-                        })
-                        .inc();
-                    return Err(e.into());
-                }
-            },
-            None => MultiStream::Tcp(socket),
-        };
-
-        Ok(Connection::new(writer))
+        Ok(socket)
     }
 
     /// Accept an inbound connection.
@@ -359,7 +313,7 @@ impl Listener {
     /// After the second failure, the task waits for 2 seconds. Each subsequent
     /// failure doubles the wait time. If accepting fails on the 6th try after
     /// waiting for 64 seconds, then this function returns with an error.
-    async fn accept(&mut self) -> Result<Connection> {
+    async fn accept(&mut self) -> Result<TcpStream> {
         let mut backoff = 1;
 
         // Try to accept a few times
@@ -399,11 +353,49 @@ impl Handler {
     /// When the shutdown signal is received, the connection is processed until
     /// it reaches a safe state, at which point it is terminated.
     #[instrument(skip(self))]
-    async fn run(&mut self) -> Result<()> {
+    async fn run(&mut self, socket: TcpStream) -> Result<()> {
+        let sock = SockRef::from(&socket);
+        let ka = TcpKeepalive::new()
+            .with_time(std::time::Duration::from_secs(10))
+            .with_interval(std::time::Duration::from_secs(5))
+            .with_retries(3);
+
+        if let Err(e) = sock.set_tcp_keepalive(&ka) {
+            self.db
+                .metrics
+                .connection_error
+                .get_or_create(&IdentChanErrorLabels {
+                    ident: None,
+                    chan: None,
+                    error: crate::prometheus::ErrorLabel::SocketConfigurationFailure,
+                })
+                .inc();
+            return Err(e.into());
+        }
+
+        let mut connection = Connection::new(match &self.acceptor {
+            Some(acceptor) => match acceptor.accept(socket).await {
+                Ok(socket) => MultiStream::Tls(socket),
+                Err(e) => {
+                    self.db
+                        .metrics
+                        .connection_error
+                        .get_or_create(&IdentChanErrorLabels {
+                            ident: None,
+                            chan: None,
+                            error: crate::prometheus::ErrorLabel::TlsFailure,
+                        })
+                        .inc();
+                    return Err(e.into());
+                }
+            },
+            None => MultiStream::Tcp(socket),
+        });
+
         let mut data = [0u8; 4];
         rand::thread_rng().fill_bytes(&mut data);
 
-        self.connection
+        connection
             .write_frame(&Frame::Info(Info {
                 broker_name: "hpfeeds-broker".into(),
                 nonce: data,
@@ -423,9 +415,9 @@ impl Handler {
             // While reading a request frame, also listen for the shutdown
             // signal.
             let maybe_frame = tokio::select! {
-                res = self.connection.read_frame() => res?,
+                res = connection.read_frame() => res?,
                 Some((_, Publish {ident, channel, payload})) = subscriptions.next() => {
-                    let written = self.connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
+                    let written = connection.write_frame(&Frame::Publish(Publish { ident: ident.clone(), channel: channel.clone(), payload })).await?;
                     let labels = IdentChanLabels { ident: self.ident.clone().context("Received pub before auth")?, chan: channel };
                     self.db.metrics.publish_sent.get_or_create(&labels).inc();
                     self.db.metrics.publish_sent_bytes.get_or_create(&labels).inc_by(written as u64);
@@ -453,7 +445,7 @@ impl Handler {
                             let result = sign(data, &user.secret);
 
                             if !constant_time_eq(&result, &signature[..]) {
-                                self.connection
+                                connection
                                     .write_frame(&Frame::Error(Error {
                                         message: "Authentication failed".into(),
                                     }))
@@ -494,7 +486,7 @@ impl Handler {
                         })
                         .inc();
 
-                    self.connection
+                    connection
                         .write_frame(&Frame::Error(Error {
                             message: "Authentication failed".into(),
                         }))
@@ -554,7 +546,7 @@ impl Handler {
                         })
                         .inc();
 
-                    self.connection
+                    connection
                         .write_frame(&Frame::Error(Error {
                             message: "Publish not authorized".into(),
                         }))
@@ -600,7 +592,7 @@ impl Handler {
                         })
                         .inc();
 
-                    self.connection
+                    connection
                         .write_frame(&Frame::Error(Error {
                             message: "Subscribe not authorized".into(),
                         }))
