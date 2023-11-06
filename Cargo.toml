@@ -2,7 +2,7 @@
 authors = ["John Carr <john.carr@unrouted.co.uk>"]
 edition = "2021"
 name = "hpfeeds-broker"
-version = "0.0.1"
+version = "1.0.0"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/hpfeeds/hpfeeds-broker"
