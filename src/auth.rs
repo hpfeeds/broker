@@ -73,7 +73,7 @@ impl UserSet {
     pub fn get_user(&self, user: &str) -> Option<User> {
         match self {
             Self::Static(users) => users.get(user).cloned(),
-            Self::Json { users, .. } => users.load_full().get(user).cloned(),
+            Self::Json { users, .. } => users.load().get(user).cloned(),
         }
     }
 }
