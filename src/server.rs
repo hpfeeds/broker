@@ -7,7 +7,7 @@ use crate::endpoint::ListenerClass;
 use crate::frame::{Auth, Error, Info, Publish, Subscribe, Unsubscribe};
 use crate::prometheus::{IdentChanErrorLabels, IdentLabels};
 use crate::stream::MultiStream;
-use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Shutdown, Resolver};
+use crate::{auth, sign, Connection, Db, Endpoint, Frame, IdentChanLabels, Resolver, Shutdown};
 
 use anyhow::{bail, Context, Result};
 use constant_time_eq::constant_time_eq;
