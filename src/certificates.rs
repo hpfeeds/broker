@@ -1,11 +1,7 @@
-use std::{
-    fs::File,
-    io::BufReader,
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::{fs::File, io::BufReader, path::Path, sync::Arc};
 
 use anyhow::{bail, Result};
+use arc_swap::ArcSwap;
 use notify::{recommended_watcher, RecommendedWatcher, RecursiveMode, Watcher};
 use rustls::{
     server::{ClientHello, ResolvesServerCert},
@@ -42,7 +38,7 @@ fn load_certified_key(private_key: &str, certificate: &str) -> Result<CertifiedK
 }
 
 pub struct Resolver {
-    pub certificate: Arc<RwLock<Arc<CertifiedKey>>>,
+    pub certificate: Arc<ArcSwap<CertifiedKey>>,
     pub watcher: RecommendedWatcher,
 }
 
@@ -52,7 +48,7 @@ impl Resolver {
         let watched_certificate = certificate.clone();
 
         let key = load_certified_key(&private_key, &certificate)?;
-        let certified_key = Arc::new(RwLock::new(Arc::new(key)));
+        let certified_key = Arc::new(ArcSwap::new(Arc::new(key)));
         let watched_certified_key = certified_key.clone();
 
         let mut watcher = recommended_watcher(move |res| {
@@ -66,10 +62,7 @@ impl Resolver {
                 }
             };
 
-            let mut guard = watched_certified_key
-                .write()
-                .expect("Could not lock certificate");
-            *guard = Arc::new(key);
+            watched_certified_key.swap(Arc::new(key));
 
             info!("Certificate reloaded");
         })?;
@@ -86,6 +79,6 @@ impl Resolver {
 
 impl ResolvesServerCert for Resolver {
     fn resolve(&self, _client_hello: ClientHello) -> Option<std::sync::Arc<CertifiedKey>> {
-        Some(self.certificate.read().unwrap().clone())
+        Some(self.certificate.load_full())
     }
 }

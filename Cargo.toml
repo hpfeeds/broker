@@ -41,6 +41,7 @@ prometheus-client = "0.22.0"
 hyper = { version = "0.14.16", features = ["server", "http1", "tcp"] }
 anyhow = "1.0.75"
 notify = "6.1.1"
+arc-swap = "1.6.0"
 
 [dev-dependencies]
 # Enable test-utilities in dev mode only. This is mostly for tests.

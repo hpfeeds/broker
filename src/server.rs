@@ -15,7 +15,6 @@ use rand::RngCore;
 
 use socket2::{SockRef, TcpKeepalive};
 
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
