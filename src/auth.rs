@@ -141,7 +141,7 @@ impl Users {
         Ok(())
     }
 
-    pub fn get(&self, username: &String) -> Option<User> {
+    pub fn get(&self, username: &str) -> Option<User> {
         for set in &self.user_sets {
             if let Some(user) = set.get_user(username) {
                 return Some(user.clone());

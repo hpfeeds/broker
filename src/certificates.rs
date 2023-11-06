@@ -33,8 +33,8 @@ fn load_keys(path: &str) -> Result<PrivateKey> {
 }
 
 fn load_certified_key(private_key: &str, certificate: &str) -> Result<CertifiedKey> {
-    let certs = load_certs(&certificate)?;
-    let key = load_keys(&private_key)?;
+    let certs = load_certs(certificate)?;
+    let key = load_keys(private_key)?;
 
     let key = rustls::sign::any_supported_type(&key)?;
 
