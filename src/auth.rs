@@ -1,11 +1,12 @@
 use anyhow::Result;
+use arc_swap::ArcSwap;
 use notify::{recommended_watcher, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 use tracing::{error, info};
 
@@ -21,7 +22,7 @@ pub struct User {
 pub enum UserSet {
     Static(BTreeMap<String, User>),
     Json {
-        users: Arc<RwLock<BTreeMap<String, User>>>,
+        users: Arc<ArcSwap<BTreeMap<String, User>>>,
         watcher: RecommendedWatcher,
     },
 }
@@ -33,7 +34,7 @@ impl UserSet {
 
         let users_string = std::fs::read_to_string(&path)?;
         let users: BTreeMap<String, User> = serde_json::from_str(&users_string)?;
-        let users = Arc::new(RwLock::new(users));
+        let users = Arc::new(ArcSwap::new(Arc::new(users)));
         let users_ro_view = users.clone();
 
         let mut watcher = recommended_watcher(move |res| {
@@ -56,8 +57,7 @@ impl UserSet {
 
             let len = new_users.len();
 
-            let mut guard = users.write().expect("Could not lock user data");
-            *guard = new_users;
+            users.store(Arc::new(new_users));
 
             info!("Reloaded user data: {path}. Found {} records.", len);
         })?;
@@ -73,7 +73,7 @@ impl UserSet {
     pub fn get_user(&self, user: &str) -> Option<User> {
         match self {
             Self::Static(users) => users.get(user).cloned(),
-            Self::Json { users, .. } => users.read().unwrap().get(user).cloned(),
+            Self::Json { users, .. } => users.load().get(user).cloned(),
         }
     }
 }
@@ -141,7 +141,7 @@ impl Users {
         Ok(())
     }
 
-    pub fn get(&self, username: &String) -> Option<User> {
+    pub fn get(&self, username: &str) -> Option<User> {
         for set in &self.user_sets {
             if let Some(user) = set.get_user(username) {
                 return Some(user.clone());
