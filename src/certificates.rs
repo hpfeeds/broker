@@ -20,12 +20,19 @@ fn load_certs(path: &str) -> Result<Vec<Certificate>> {
 fn load_keys(path: &str) -> Result<PrivateKey> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
-    let mut keys = rustls_pemfile::rsa_private_keys(&mut reader)?;
-    match keys.len() {
-        0 => bail!("No PKCS8-encoded private key found in {path}"),
-        1 => Ok(PrivateKey(keys.remove(0))),
-        _ => bail!("More than one PKCS8-encoded private key found in {path}"),
+
+    let keys = rustls_pemfile::read_all(&mut reader)?;
+    for item in keys {
+        match item {
+            rustls_pemfile::Item::X509Certificate(_) => continue,
+            rustls_pemfile::Item::RSAKey(key) => return Ok(PrivateKey(key)),
+            rustls_pemfile::Item::PKCS8Key(key) => return Ok(PrivateKey(key)),
+            rustls_pemfile::Item::ECKey(key) => return Ok(PrivateKey(key)),
+            rustls_pemfile::Item::Crl(_) => continue,
+            _ => continue,
+        }
     }
+    bail!("No private keys found in {path}");
 }
 
 fn load_certified_key(private_key: &str, certificate: &str) -> Result<CertifiedKey> {
