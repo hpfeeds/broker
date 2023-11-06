@@ -51,7 +51,7 @@ pub async fn main() -> Result<()> {
     if cli.bind.is_some() || endpoints.is_empty() {
         let bind = match cli.bind {
             Some(bind) => bind,
-            None => "0.0.0.0:20000".to_string(),
+            None => "127.0.0.1:20000".to_string(),
         };
         let (address, port) = bind.split_once(':').context("bind is incorrect")?;
 

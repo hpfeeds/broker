@@ -34,7 +34,7 @@ pub fn parse_endpoint(endpoint: &str) -> Result<Endpoint> {
     let interface = kv
         .get("interface")
         .cloned()
-        .unwrap_or("127.0.0.1".to_string());
+        .unwrap_or("0.0.0.0".to_string());
 
     let port = kv
         .get("port")
@@ -76,7 +76,7 @@ mod tests {
             parse_endpoint("tcp").unwrap(),
             Endpoint {
                 listener_class: ListenerClass::Tcp,
-                interface: "127.0.0.1".to_string(),
+                interface: "0.0.0.0".to_string(),
                 port: 10000,
                 device: None,
             }
@@ -103,7 +103,7 @@ mod tests {
                     private_key: "/app/var/tls/tls.key".to_string(),
                     chain: None,
                 },
-                interface: "127.0.0.1".to_string(),
+                interface: "0.0.0.0".to_string(),
                 port: 30000,
                 device: Some("eth0".to_string()),
             }
