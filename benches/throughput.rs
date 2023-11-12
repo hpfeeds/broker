@@ -105,7 +105,7 @@ fn single_subscriber(bench: &mut Bencher) {
         p.write_frame(&Frame::Publish(Publish {
             ident: "foo".into(),
             channel: "bar".into(),
-            payload: Bytes::from_static(b"hello world"),
+            payload: Arc::new(Bytes::from_static(b"hello world")),
         }))
         .await
         .unwrap();
@@ -120,7 +120,7 @@ fn single_subscriber(bench: &mut Bencher) {
             p.write_frame(&Frame::Publish(Publish {
                 ident: "foo".into(),
                 channel: "bar".into(),
-                payload: Bytes::from_static(b"hello world"),
+                payload: Arc::new(Bytes::from_static(b"hello world")),
             }))
             .await
             .unwrap();
@@ -153,7 +153,7 @@ fn twenty_subscribers(bench: &mut Bencher) {
         p.write_frame(&Frame::Publish(Publish {
             ident: "foo".into(),
             channel: "bar".into(),
-            payload: Bytes::from_static(b"hello world"),
+            payload: Arc::new(Bytes::from_static(b"hello world")),
         }))
         .await
         .unwrap();
@@ -166,7 +166,7 @@ fn twenty_subscribers(bench: &mut Bencher) {
             p.write_frame(&Frame::Publish(Publish {
                 ident: "foo".into(),
                 channel: "bar".into(),
-                payload: Bytes::from_static(b"hello world"),
+                payload: Arc::new(Bytes::from_static(b"hello world")),
             }))
             .await
             .unwrap();

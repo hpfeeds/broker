@@ -91,7 +91,7 @@ fn assert_published(
         }))) => {
             assert_eq!(ident, expected_ident);
             assert_eq!(channel, expected_channel);
-            assert_eq!(payload, expected_payload);
+            assert_eq!(payload.as_ref(), expected_payload.as_ref());
         }
         Ok(Some(frame)) => {
             panic!("Received unexpected frame: {}", frame);
@@ -119,7 +119,7 @@ async fn pub_sub() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte string"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte string")),
     }))
     .await
     .unwrap();
@@ -135,7 +135,7 @@ async fn pub_sub() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte strin2"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte strin2")),
     }))
     .await
     .unwrap();
@@ -158,7 +158,7 @@ async fn pub_sub() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte strin3"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte strin3")),
     }))
     .await
     .unwrap();
@@ -188,7 +188,7 @@ async fn nsubscribe() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte string"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte string")),
     }))
     .await
     .unwrap();
@@ -205,7 +205,7 @@ async fn nsubscribe() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte strin2"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte strin2")),
     }))
     .await
     .unwrap();
@@ -229,7 +229,7 @@ async fn nsubscribe() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte strin3"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte strin3")),
     }))
     .await
     .unwrap();
@@ -247,7 +247,7 @@ async fn nsubscribe() {
     conn.write_frame(&Frame::Publish(Publish {
         ident: "foo".into(),
         channel: "bar".into(),
-        payload: Bytes::from_static(b"this is a byte strin4"),
+        payload: Arc::new(Bytes::from_static(b"this is a byte strin4")),
     }))
     .await
     .unwrap();

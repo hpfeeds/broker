@@ -6,6 +6,7 @@ use bytes::{Buf, Bytes};
 use std::convert::TryInto;
 use std::fmt;
 use std::io::Cursor;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Error {
@@ -28,7 +29,7 @@ pub struct Auth {
 pub struct Publish {
     pub ident: String,
     pub channel: String,
-    pub payload: Bytes,
+    pub payload: Arc<Bytes>,
 }
 
 #[derive(Clone, Debug)]
@@ -114,7 +115,7 @@ impl Frame {
                 Ok(Frame::Publish(Publish {
                     ident,
                     channel,
-                    payload: payload.into(),
+                    payload: Arc::new(payload.into()),
                 }))
             }
             // OP_SUBSCRIBE
