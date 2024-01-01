@@ -39,7 +39,7 @@ rustls-pemfile = "1.0.4"
 rustls = "0.21.8"
 prometheus-client = "0.22.0"
 hyper = { version = "0.14.28", features = ["server", "http1", "tcp"] }
-anyhow = "1.0.77"
+anyhow = "1.0.78"
 notify = "6.1.1"
 arc-swap = "1.6.0"
 
