@@ -165,7 +165,6 @@ impl Listener {
             } => {
                 let cert_resolver = Resolver::new(private_key, certificate, chain)?;
                 let config = rustls::ServerConfig::builder()
-                    .with_safe_defaults()
                     .with_no_client_auth()
                     .with_cert_resolver(Arc::new(cert_resolver));
 
