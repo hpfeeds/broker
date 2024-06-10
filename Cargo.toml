@@ -29,7 +29,7 @@ tokio-stream = "0.1"
 tracing = "0.1.37"
 tracing-futures = { version = "0.2.3" }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-socket2 = { version = "0.5.6", features = ["all"] }
+socket2 = { version = "0.5.7", features = ["all"] }
 sha1 = "0.10.5"
 constant_time_eq = "0.3.0"
 serde = { version = "1", features=["derive"] }
